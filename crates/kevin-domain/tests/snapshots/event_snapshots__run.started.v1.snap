@@ -1,0 +1,25 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "auto_approve_plans": false,
+  "budget": {
+    "max_attempts": 2,
+    "max_parallel": 4,
+    "max_tokens": null,
+    "max_usd": "10.0",
+    "max_wall": null
+  },
+  "goal": {
+    "cwd": "/repo",
+    "repo_kind": "git",
+    "text": "Add a /healthz endpoint"
+  },
+  "mode": {
+    "type": "interactive"
+  },
+  "requested_by": "valentin",
+  "run_id": "01910000-0000-7000-8000-0000000000a1",
+  "type": "run.started"
+}

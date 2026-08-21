@@ -1,0 +1,8 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "requested_by": "valentin",
+  "type": "run.evaluation_requested"
+}

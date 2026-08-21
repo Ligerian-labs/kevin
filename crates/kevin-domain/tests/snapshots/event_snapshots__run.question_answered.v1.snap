@@ -1,0 +1,9 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "question_id": "01910000-0000-7000-8000-000000000d01",
+  "remaining_open": 0,
+  "type": "run.question_answered"
+}

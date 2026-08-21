@@ -1,0 +1,9 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "next_attempt_no": 2,
+  "reason": "transient failure",
+  "type": "task.retried"
+}

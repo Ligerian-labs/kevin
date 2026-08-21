@@ -1,0 +1,9 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "by": "valentin",
+  "proposal_id": "01910000-0000-7000-8000-000000000f01",
+  "type": "evaluation.proposal_accepted"
+}

@@ -13,9 +13,14 @@ workspace = true
 
 [dependencies]
 chrono.workspace = true
+rust_decimal.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
-uuid.workspace = true
+uuid = { workspace = true, features = ["v5"] }
 
 [dev-dependencies]
+insta.workspace = true
+kevin-testkit.workspace = true
+proptest.workspace = true
 serde_json.workspace = true
