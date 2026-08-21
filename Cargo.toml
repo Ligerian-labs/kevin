@@ -86,6 +86,9 @@ comfy-table = "8.0"
 ratatui = "0.30"
 crossterm = "0.29"
 
+# --- embeddings (kevin-memory `fastembed` feature; local ONNX, no network at runtime once cached) ---
+fastembed = { version = "6.0", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"] }
+
 # --- misc ---
 rand = "0.10"
 tempfile = "3.27"

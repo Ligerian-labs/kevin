@@ -1,6 +1,6 @@
 [package]
 name = "kevin-memory"
-description = "Memory core context."
+description = "Memory core context: pgvector-backed memory items, local embeddings, hybrid retrieval and the planner context block."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,8 +11,35 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = ["fastembed"]
+# Local ONNX embeddings (`FastEmbedEmbedder`, `BAAI/bge-small-en-v1.5`).
+# The model is downloaded on first use and cached under `<data_dir>/embeddings`;
+# nothing in the test suite needs it (see `KEVIN_FASTEMBED_TESTS`).
+fastembed = ["dep:fastembed"]
+
 [dependencies]
 kevin-domain.workspace = true
 kevin-config.workspace = true
+kevin-store.workspace = true
 kevin-telemetry.workspace = true
 
+async-trait.workspace = true
+chrono.workspace = true
+metrics.workspace = true
+pgvector.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+fastembed = { workspace = true, optional = true }
+
+[dev-dependencies]
+kevin-testkit = { workspace = true, features = ["pg"] }
+anyhow.workspace = true
+tokio = { workspace = true, features = ["full"] }
