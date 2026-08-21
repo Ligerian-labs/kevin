@@ -1,0 +1,16 @@
+# Golden capture metadata (`plan/11-testing.md` §Fixtures and test data layout).
+kind = "claude"
+fixture = "success.jsonl"
+source = "captured"
+cli_version = "2.1.239"
+model = "claude-haiku-4-5"
+captured_at = "2026-08-21"
+# argv (prompt on stdin):
+#   claude -p --output-format stream-json --verbose --model claude-haiku-4-5
+#     --permission-mode acceptEdits --allowedTools Read Glob
+#     --append-system-prompt <ctx> --max-turns 4 --max-budget-usd 0.10
+#     --session-id 11111111-2222-4333-8444-555555555555
+# Scrubbing: absolute paths → /workspace and /home/kevin; the `init` line's
+# tools/skills/agents/plugins/mcp_servers arrays trimmed; thinking `signature`
+# replaced by "<scrubbed>". Token/usage/cost numbers are untouched.
+verified = ["system/init", "assistant/thinking", "assistant/tool_use", "user/tool_result", "assistant/text", "result/success", "rate_limit_event", "system/hook_started", "system/hook_response", "system/thinking_tokens"]
