@@ -116,7 +116,7 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
             "no",
         ],
         &["db", "migrate"],
-        &["workers", "doctor"],
+        // `config show` (WS-02) and `workers doctor` (WS-05) are implemented.
         &["routes"],
         &["routes", "explain", "--kind", "implement"],
         &["lessons"],

@@ -13,5 +13,9 @@ workspace = true
 
 [dependencies]
 kevin-domain.workspace = true
+kevin-worker.workspace = true
 chrono.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio-util.workspace = true
 uuid.workspace = true
