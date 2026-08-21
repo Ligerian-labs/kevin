@@ -1,0 +1,6 @@
+/target/
+/workspace/
+/thoughts/
+/.kevin/
+**/*.orig
+.DS_Store
