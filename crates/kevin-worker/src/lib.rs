@@ -8,6 +8,7 @@
 //! [`WorkerOutcome`].
 //!
 //! Module map (frozen names, extend rather than rename):
+//! - [`claude`] — the `claude` (Claude Code) CLI adapter.
 //! - [`types`] — request-side value objects (`TaskAttemptRequest`, `Usage`, …).
 //! - [`worker`] — the [`Worker`] trait, events, outcomes, handle, doctor.
 //! - [`supervisor`] — subprocess supervision: process groups, kill grace,
@@ -23,6 +24,7 @@
 //! `kevin-telemetry`. Implemented by WS-05 (core + fake) and WS-06/13/14/15
 //! (adapters).
 
+pub mod claude;
 pub mod fake;
 pub mod policy;
 pub mod registry;
@@ -32,6 +34,7 @@ pub mod types;
 pub mod usage;
 pub mod worker;
 
+pub use claude::ClaudeWorker;
 pub use policy::{SandboxPolicy, SandboxTier};
 pub use registry::{RegistryConfig, WorkerCfg, WorkerRegistry};
 pub use supervisor::{ChildExit, ChildHandle, ExitReason, SpawnOpts, Supervisor, Verdict};

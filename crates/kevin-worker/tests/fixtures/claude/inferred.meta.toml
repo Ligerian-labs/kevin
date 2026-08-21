@@ -1,0 +1,27 @@
+# Hand-authored fixtures (`plan/11-testing.md` §Fixtures and test data layout).
+#
+# `success.jsonl` is a real capture (see `success.meta.toml`). The three below
+# are hand-written from `plan/04-workers.md` §Adapter: claude, using the line
+# shapes of that capture. Their *envelope* (type/subtype/result/usage/cost) is
+# copied from the real stream; the fields listed under `inferred` were taken
+# from the plan and cross-checked against strings in the installed CLI binary
+# (`claude` 2.1.239) but never observed live.
+#
+# [inferred — verify] refresh them with `KEVIN_LIVE_TESTS=1 cargo nextest run
+# -p kevin-worker live_ -- --run-ignored all` against a newer CLI.
+cli_version = "2.1.239"
+
+[structured]
+fixture = "structured.jsonl"
+inferred = ["result.structured_output"]
+note = "`--json-schema` was not exercised live; the field name `structured_output` is present in the 2.1.239 binary next to `ttft_ms` on the result payload."
+
+[error_max_turns]
+fixture = "error_max_turns.jsonl"
+inferred = ["result.subtype = error_max_turns", "user.message.content[].is_error"]
+note = "subtype string present in the 2.1.239 binary; maps to Failed{Permanent}."
+
+[rate_limit]
+fixture = "rate_limit.jsonl"
+inferred = ["result.subtype = error_during_execution", "result.api_error_status"]
+note = "subtype string present in the 2.1.239 binary; maps to Failed{Transient} when the message matches a rate-limit/network signature."
