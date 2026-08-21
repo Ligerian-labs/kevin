@@ -154,23 +154,41 @@ codex exec --json
   -m <model.model>
   -C <workspace.root>
   -s <workers.codex.sandbox>                    # read-only | workspace-write ; danger-full-access only container tier
-  [--output-schema <tmpfile.json>]              # spec.output_schema
+  [--output-schema <data_dir>/runs/<run>/<task>/<attempt>.schema.json]   # spec.output_schema
   -o <data_dir>/runs/<run>/<task>/<attempt>.last.txt
-  [-c model_reasoning_effort="<low|medium|high|xhigh>"]   # Effort mapping; Max → high
+  [-c model_reasoning_effort=<low|medium|high|xhigh|max>]   # Effort mapping 1:1
   --skip-git-repo-check
+  [--ephemeral]                                 # opt-in; disables resume
   [--dangerously-bypass-approvals-and-sandbox]  # ONLY container tier
-  <extra_args…>
+  <extra_args…>                                 # deduplicated against the above
   -                                             # prompt from stdin
 ```
 
+`codex exec` has no `--append-system-prompt`: the Kevin briefing (title,
+acceptance criteria, operator context, memory block) is prepended to the prompt
+written on stdin.
+
 Follow-up: `codex exec resume <session_id> --json … -` with the new prompt.
+`resume` accepts neither `-C` nor `-s` (verified, `codex-cli` 0.149.0): the cwd
+comes from the supervisor and the sandbox from the resumed session.
+
 Event mapping (JSONL): `thread.started{thread_id}` → `Started{session_id}`;
 `item.completed{item.type: "agent_message", text}` → `AssistantText`;
-`item.*{type: "command_execution" | "file_change" | "mcp_tool_call"}` →
-`ToolCall`/`ToolResult`; `turn.completed{usage}` → `Usage` then `Final` (text =
-contents of the `-o` file, structured = parsed if schema given); `turn.failed`
-/ `error` → `Failed`. Item/field names `[inferred — verify]`; fixtures pin them.
-Usage has no cost → router price table.
+`item.completed{item.type: "reasoning", text}` → `Thinking`;
+`item.started`/`item.completed` with `item.type` ∈ {`command_execution`,
+`file_change`, `mcp_tool_call`, `web_search`, `todo_list`} →
+`ToolCall`/`ToolResult` (`ok = false` on a non-zero `exit_code` or a `failed` /
+`declined` status); `turn.completed{usage}` → `Usage` then `Final` (text =
+contents of the `-o` file, falling back to the last `agent_message`; structured
+= extracted from that text and validated, the stream carries no structured
+field); `turn.failed{error.message}` / `{"type":"error","message"}` → `Failed`.
+`turn.started` and `item.updated` are transcript-only. Fixtures pin the shapes.
+
+Usage: `turn.completed.usage` is `{input_tokens, cached_input_tokens,
+cache_write_input_tokens, output_tokens, reasoning_output_tokens}`;
+`input_tokens` *includes* the cached ones (Kevin subtracts them so
+`total_tokens()` does not double count) and `reasoning_output_tokens` is
+already part of `output_tokens`. No cost anywhere → router price table.
 
 ## Adapter: `pi`
 
@@ -250,7 +268,7 @@ Kohral conformance suite need no model.
 | Worker | Usage source | Cost | Session / follow-up | Effort |
 |---|---|---|---|---|
 | claude | `message.usage`, `result.usage` | `total_cost_usd` from result | `--session-id` / `--resume` | none (alias) |
-| codex | `turn.completed.usage` | price table | `codex exec resume <thread_id>` | `-c model_reasoning_effort` |
+| codex | `turn.completed.usage` | price table | `codex exec resume <thread_id>` | `-c model_reasoning_effort` (1:1, `max` included) |
 | pi | usage block `[inferred — verify]` | price table | `--session-id` | `--thinking` |
 | opencode | message metadata `[inferred — verify]` | price table | `-s <id>` | `--variant` |
 | fake | scripted | 0 | n/a | ignored |

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a00000-0000-7000-8000-0000000fa17e"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"sandbox denied write to /etc/hosts"}}
+{"type":"turn.failed","error":{"message":"exceeded the maximum number of tool calls for this turn"}}

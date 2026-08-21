@@ -9,6 +9,7 @@
 //!
 //! Module map (frozen names, extend rather than rename):
 //! - [`claude`] — the `claude` (Claude Code) CLI adapter.
+//! - [`codex`] — the `codex` (OpenAI Codex) CLI adapter.
 //! - [`types`] — request-side value objects (`TaskAttemptRequest`, `Usage`, …).
 //! - [`worker`] — the [`Worker`] trait, events, outcomes, handle, doctor.
 //! - [`supervisor`] — subprocess supervision: process groups, kill grace,
@@ -25,6 +26,7 @@
 //! (adapters).
 
 pub mod claude;
+pub mod codex;
 pub mod fake;
 pub mod policy;
 pub mod registry;
@@ -35,6 +37,7 @@ pub mod usage;
 pub mod worker;
 
 pub use claude::ClaudeWorker;
+pub use codex::CodexWorker;
 pub use policy::{SandboxPolicy, SandboxTier};
 pub use registry::{RegistryConfig, WorkerCfg, WorkerRegistry};
 pub use supervisor::{ChildExit, ChildHandle, ExitReason, SpawnOpts, Supervisor, Verdict};

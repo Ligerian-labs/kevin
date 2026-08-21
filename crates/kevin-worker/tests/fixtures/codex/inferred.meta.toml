@@ -1,0 +1,53 @@
+# Hand-authored fixtures (`plan/11-testing.md` §Fixtures and test data layout).
+#
+# `success.jsonl` is a real capture (see `success.meta.toml`). The three below
+# are hand-written from `plan/04-workers.md` §Adapter: codex using the envelope
+# of that capture. The event/item type names and every field listed under
+# `inferred` were read out of the installed binary's embedded serde tables
+# (`codex-cli 0.149.0`, `strings /usr/local/bin/codex`) — the `ThreadEvent`
+# variants (`thread.started`, `turn.started`, `turn.completed`, `turn.failed`,
+# `item.started`, `item.updated`, `item.completed`), the item discriminants
+# (`agent_message`, `reasoning`, `command_execution`, `file_change`,
+# `mcp_tool_call`, `web_search`, `todo_list`, `error`, `other`) and the item
+# statuses (`in_progress`, `completed`, `failed`, `declined`) — but only the
+# shapes in `success.meta.toml` were observed live.
+#
+# [inferred — verify] refresh them with `KEVIN_LIVE_TESTS=1 cargo nextest run
+# -p kevin-worker ac_ws13_5 -- --run-ignored all` against a newer CLI.
+cli_version = "codex-cli 0.149.0"
+
+[tools]
+fixture = "tools.jsonl"
+inferred = [
+  "item.type = reasoning, field `text`",
+  "item.type = file_change, field `changes[].{path,kind}` with kind ∈ add|delete|update",
+  "item.type = mcp_tool_call, fields `server`, `tool`, `arguments`, `status`",
+  "item.type = web_search, field `query`",
+  "item.type = todo_list, field `items`",
+  "item.status = failed",
+]
+note = """
+Covers every tool-ish item type the binary knows. `command_execution` with a
+non-zero `exit_code` and `mcp_tool_call` with `status = failed` are the two
+`ToolResult{ok = false}` shapes.
+"""
+
+[structured]
+fixture = "structured.jsonl"
+inferred = ["the final agent_message is the JSON demanded by --output-schema"]
+note = """
+`codex exec --output-schema <FILE>` exists in 0.149.0 (verified in `--help`) but
+the stream carries no dedicated structured field: the schema constrains the
+final assistant message, so Kevin extracts and validates it from the final text
+(`plan/04-workers.md` §Structured output step 2).
+"""
+
+[turn_failed]
+fixture = "turn_failed.jsonl"
+inferred = ["turn.failed{error.message}", "item.type = error, field `message`"]
+note = "maps to Failed{Permanent} unless the message matches a rate-limit/network signature."
+
+[rate_limit]
+fixture = "rate_limit.jsonl"
+inferred = ["top-level {\"type\":\"error\",\"message\"} event (ThreadErrorEvent)"]
+note = "maps to Failed{Transient} because the message matches the 429 signature."
