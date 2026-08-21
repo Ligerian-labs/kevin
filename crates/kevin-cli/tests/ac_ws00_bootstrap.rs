@@ -115,8 +115,7 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
             "--feedback",
             "no",
         ],
-        // `db` is implemented by WS-03 (see ac_ws03_db_commands.rs).
-        &["workers", "doctor"],
+        // `db` (WS-03), `config show` (WS-02) and `workers doctor` (WS-05) are implemented.
         &["routes"],
         &["routes", "explain", "--kind", "implement"],
         &["lessons"],

@@ -1,0 +1,13 @@
+# The scenario from plan/04-workers.md §Adapter: fake (verbatim).
+default: { reply: "done", usage: { input_tokens: 10, output_tokens: 5 } }
+rules:
+  - match: "reply deterministically"      # substring or /regex/
+    reply: "kohral-ok"                     # Kohral conformance basic phase
+  - match: "[[KOHRAL_HOLD]]"
+    hold: true                             # emits Started then waits until cancelled (crash phases)
+  - match: /implement .* auth/
+    events: [ {tool_call: {name: edit, input_summary: "src/auth.rs"}}, {text: "Added auth"} ]
+    structured: { status: "ok" }
+    delay_ms: 50
+  - match: "fail transient"
+    fail: { class: transient, message: "simulated 429" }

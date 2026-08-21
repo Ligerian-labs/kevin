@@ -1,0 +1,17 @@
+# Structured-output scenarios: fenced JSON that needs extraction, and a
+# schema violation that must fail the attempt with Permanent/schema_violation.
+default:
+  reply: "no json at all"
+rules:
+  - match: "fenced"
+    reply: |
+      Here you go:
+      ```json
+      {"status": "ok", "files": ["src/auth.rs",],}
+      ```
+      Let me know if you need anything else.
+  - match: "violate"
+    reply: '{"status": "maybe"}'
+  - match: "native"
+    reply: "done"
+    structured: { status: "error", files: [] }
