@@ -1,0 +1,37 @@
+# Golden capture metadata (`plan/11-testing.md` §Fixtures and test data layout).
+kind = "pi"
+fixture = "success.jsonl"
+source = "captured"
+cli_version = "0.84.2"
+provider = "openai-codex"
+model = "gpt-5.4-mini"
+captured_at = "2026-08-21"
+# argv (the prompt is the last argument — `pi` has no stdin prompt mode):
+#   pi -p --mode json --provider openai-codex --model gpt-5.4-mini --thinking low
+#      --no-session --no-context-files --tools read,ls
+#      --append-system-prompt <ctx incl. the JSON schema instruction>
+#      "Read hello.txt in the current directory and reply with only the JSON object."
+# Scrubbing: session `id` and `cwd` replaced; absolute paths → /workspace and
+# /home/kevin; provider ids (`call_…|fc_…`, `msg_…`, `resp_…`) → `*_scrubbed`.
+# Token/usage/cost numbers and every event ordering are untouched.
+verified = [
+  "session (stream header, carries the session id)",
+  "agent_start / turn_start / turn_end / agent_end / agent_settled",
+  "message_start + message_end for role = user | assistant | toolResult",
+  "message_update / assistantMessageEvent = thinking_start|thinking_delta|thinking_end",
+  "message_update / assistantMessageEvent = toolcall_start|toolcall_delta|toolcall_end",
+  "message_update / assistantMessageEvent = text_start|text_delta|text_end",
+  "tool_execution_start{toolCallId,toolName,args}",
+  "tool_execution_end{toolCallId,toolName,result,isError}",
+  "message.usage = {input,output,cacheRead,cacheWrite,reasoning,totalTokens,cost{…,total}}",
+  "message.stopReason = toolUse (mid-turn) then stop (final answer)",
+]
+# Observed, and relied upon by the adapter:
+#  - `message_update` records carry only the delta (no cumulative `partial`),
+#    and their top-level `usage` stayed zero for the whole capture.
+#  - `message_end.message.usage` is the total of *that one message*, so the
+#    per-message totals simply add up (1228 then 1263 tokens here).
+#  - `pi` reports cost itself (`usage.cost.total`), so `Usage.cost_usd` is set
+#    and the router price table is not consulted.
+#  - print mode exited 0; there is no `result`-style terminal line.
+notes = "docs/json.md of the installed package documents this event set (`JsonAgentSessionEvent`)."

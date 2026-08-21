@@ -74,6 +74,8 @@ pub struct RegistryConfig {
     pub codex: kevin_config::CodexWorker,
     /// `[workers.opencode]` in full (the adapter needs its kind-specific keys).
     pub opencode: kevin_config::OpencodeWorker,
+    /// `[workers.pi]` in full (the adapter needs its kind-specific keys).
+    pub pi: kevin_config::PiWorker,
     /// `workers.fake.script` (`None` when empty → built-in scenario).
     pub fake_script: Option<PathBuf>,
     /// `[models.*]`.
@@ -151,6 +153,7 @@ impl From<&KevinConfig> for RegistryConfig {
             claude: w.claude.clone(),
             codex: w.codex.clone(),
             opencode: w.opencode.clone(),
+            pi: w.pi.clone(),
             fake_script: (!w.fake.script.as_os_str().is_empty()).then(|| w.fake.script.clone()),
             models: cfg.models.clone(),
             env_allowlist_extra: cfg.sandbox.env_allowlist_extra.clone(),
@@ -250,7 +253,12 @@ pub type WorkerFactory = Arc<
         + Sync,
 >;
 
-/// Adapters available in this build. WS-06/13/14/15 add their kinds here.
+/// Adapters available in this build. Every [`WorkerKind`] has one since WS-14;
+/// the `Option` stays part of the contract because a build may ship without an
+/// adapter (a kind added before its workstream lands, or a future feature
+/// gate), and [`WorkerRegistry::from_config`]/[`WorkerRegistry::doctor_all`]
+/// both have a documented branch for that case.
+#[allow(clippy::unnecessary_wraps)]
 fn builtin_factory(kind: WorkerKind) -> Option<WorkerFactory> {
     match kind {
         WorkerKind::Fake => Some(Arc::new(|cfg, _worker, _policy| {
@@ -279,8 +287,11 @@ fn builtin_factory(kind: WorkerKind) -> Option<WorkerFactory> {
             opencode.set_bin(&worker.bin);
             Ok(Arc::new(opencode) as Arc<dyn Worker>)
         })),
-        // TODO(ws-14): pi.
-        WorkerKind::Pi => None,
+        WorkerKind::Pi => Some(Arc::new(|cfg, worker, policy| {
+            let mut pi = crate::pi::PiWorker::from_registry_config(cfg, policy)?;
+            pi.set_bin(&worker.bin);
+            Ok(Arc::new(pi) as Arc<dyn Worker>)
+        })),
     }
 }
 

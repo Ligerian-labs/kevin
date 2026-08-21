@@ -1,0 +1,51 @@
+# Fixture provenance for the `pi` adapter (`plan/11-testing.md` §Fixtures).
+#
+# `plan/04-workers.md` §Adapter: pi marks the whole `--mode json` mapping
+# `[inferred — verify]`. It was verified against `pi` 0.84.2: the flags exist
+# as documented (`pi --help`), the event set is documented by the package's own
+# `docs/json.md`, and `success.jsonl` / `auth_error.jsonl` / `rate_limit.jsonl`
+# are real captures. What is still inferred is listed per fixture below.
+cli_version = "0.84.2"
+
+[deviations]
+# Differences between the plan's prose and the installed CLI, applied by the adapter:
+session_flag = "`--session <path|id>` resumes (the plan says `--session-id`); `--session-id <id>` only *creates/names* a project session, so a fresh attempt uses `--session-id <attempt uuid>` and a follow-up uses `--session <id>`."
+no_terminal_line = "`pi` has no `result`-style terminal line; `agent_end` repeats once per internal auto-retry. The verdict comes from the last assistant `message_end` (`stopReason` + `errorMessage`)."
+exit_code = "`--mode json` always exits 0, including on provider errors (only `--mode text` sets code 1), so exit status alone never classifies a pi attempt."
+usage_shape = "`usage` is camelCase (`input`,`output`,`cacheRead`,`cacheWrite`) with a nested `cost` object; `crate::usage::parse_usage` does not know that shape, so `pi::parse_pi_usage` handles it."
+
+[auth_error]
+fixture = "auth_error.jsonl"
+source = "captured"
+inferred = []
+note = """Real capture: `--provider anthropic` with an expired OAuth refresh token.
+Shows a turn that fails before any token is spent — `stopReason = "error"`,
+`errorMessage` set, usage all zero, process exit 0. Maps to Failed{Permanent}
+(the message carries no rate-limit/network signature). Home paths scrubbed."""
+
+[rate_limit]
+fixture = "rate_limit.jsonl"
+source = "captured"
+inferred = []
+note = """Real capture: `--provider zai` answering HTTP 429. Shows `pi`'s own
+retry loop (`auto_retry_start` ×3 with growing `delayMs`, then
+`auto_retry_end{success:false}`) and one `agent_end` per attempt, which is why
+the adapter takes the *last* assistant message rather than the first
+`agent_end`. Maps to Failed{Transient} through the shared 429 signature."""
+
+[structured]
+fixture = "structured.jsonl"
+source = "hand-written"
+inferred = ["nothing beyond the envelope"]
+note = """Hand-written from the line shapes of `success.jsonl` (anthropic
+provider fields). Exercises the structured-output fallback path: `pi` has no
+schema flag, so the answer is prose + a ```json fence containing a trailing
+comma, which `structured::extract_and_validate` repairs and validates."""
+
+[truncated]
+fixture = "truncated.jsonl"
+source = "hand-written"
+inferred = ["message.stopReason = length", "message.rawStopReason = max_tokens"]
+note = """Hand-written. `length` is one of the seven `StopReason` values in the
+installed `@earendil-works/pi-ai` type declarations but was not observed live;
+the adapter maps it to Failed{Permanent}."""
