@@ -59,6 +59,7 @@ metrics = "0.24"
 
 # --- config ---
 figment = { version = "0.10", features = ["toml", "env"] }
+serde_path_to_error = "0.1"
 
 # --- storage ---
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "uuid", "chrono", "json", "macros"] }

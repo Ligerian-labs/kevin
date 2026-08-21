@@ -1,0 +1,22 @@
+# User layer fixture: overrides a handful of keys at every depth.
+[kevin]
+instance_name = "user"
+profile = "laptop"
+
+[budget]
+max_attempts = 3
+
+[concurrency.per_worker_kind]
+claude = 2
+
+[workers.claude]
+max_turns = 50
+
+[models.sonnet5-claude]
+input_usd_per_m = 2.5
+
+[models.custom-pi]
+worker = "pi"
+provider = "openai"
+model = "gpt-5.6"
+tier = "fast"

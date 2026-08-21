@@ -1,0 +1,58 @@
+# Violates every validation rule at once (schema-valid TOML; validation errors only).
+[database]
+url = "mysql://kevin@localhost/kevin"
+pool_size = 0
+
+[server]
+bind = "0.0.0.0:7777"
+auth_token_file = ""
+
+[budget]
+default_run_usd = 0.0
+default_task_usd = -1.0
+default_run_wall = "0s"
+default_task_wall = "0s"
+max_attempts = 0
+max_parallel_tasks = 0
+max_tokens_per_task = 0
+
+[concurrency.per_worker_kind]
+codex = 0
+
+[workers.codex]
+enabled = false
+sandbox = "danger-full-access"
+extra_args = ["--dangerously-bypass-approvals-and-sandbox"]
+
+[workers.claude]
+permission_mode = "bypassPermissions"
+
+[workers.opencode]
+extra_args = ["--auto"]
+
+[models.nopro-pi]
+worker = "pi"
+model = "claude-sonnet-5"
+
+[models.empty-model]
+worker = "claude"
+model = ""
+
+[roles]
+planner = "does-not-exist"
+judge = "gpt56-codex"
+
+[routing]
+exploration = 1.5
+quality_weight = -0.1
+
+[routing.kinds.implement]
+candidates = ["sonnet5-claude", "ghost", "gpt56-codex"]
+
+[memory]
+dimensions = 768
+min_similarity = 2.0
+
+[sandbox]
+allow_dangerous_flags = true
+network = "deny"
