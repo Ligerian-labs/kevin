@@ -1,6 +1,6 @@
 [package]
 name = "kevin-router"
-description = "Routing core context."
+description = "Routing core context: model catalog, price table, route scores, selection policies."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,4 +15,23 @@ workspace = true
 kevin-domain.workspace = true
 kevin-config.workspace = true
 kevin-telemetry.workspace = true
+kevin-store.workspace = true
 
+async-trait.workspace = true
+chrono.workspace = true
+metrics.workspace = true
+rand.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+kevin-testkit = { workspace = true, features = ["pg"] }
+proptest.workspace = true
+tokio = { workspace = true, features = ["full"] }

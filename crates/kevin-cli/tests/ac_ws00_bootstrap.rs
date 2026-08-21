@@ -115,9 +115,8 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
             "--feedback",
             "no",
         ],
-        // `db` (WS-03), `config show` (WS-02) and `workers doctor` (WS-05) are implemented.
-        &["routes"],
-        &["routes", "explain", "--kind", "implement"],
+        // `db` (WS-03), `config show` (WS-02), `workers doctor` (WS-05),
+        // `routes` (WS-09) and `lessons`/`memory` (WS-18) are implemented.
         &["eval", "rerun", "01910000-0000-7000-8000-000000000001"],
         &["proposals", "ls"],
         &["cost", "--group-by", "model"],
