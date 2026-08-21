@@ -82,6 +82,10 @@ crossterm = "0.29"
 # --- misc ---
 rand = "0.10"
 tempfile = "3.27"
+nix = { version = "0.31", default-features = false, features = ["signal", "process"] }
+jsonschema = { version = "0.50", default-features = false }
+serde-saphyr = "1.1"
+sha2 = "0.10"
 
 # --- test-only ---
 assert_cmd = "2.2"

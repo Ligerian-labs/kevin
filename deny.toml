@@ -27,6 +27,7 @@ ignore = [
 # Permissive licenses only; add new entries deliberately (with a PR comment).
 allow = [
   "MIT",
+  "MIT-0", # borrow-or-share (via jsonschema → referencing → fluent-uri), WS-05
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
   "BSD-2-Clause",

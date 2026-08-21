@@ -1,6 +1,6 @@
 [package]
 name = "kevin-worker"
-description = "Workers supporting context."
+description = "Workers supporting context: Worker trait, subprocess supervisor, fake worker, structured output, usage."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,3 +16,33 @@ kevin-domain.workspace = true
 kevin-config.workspace = true
 kevin-telemetry.workspace = true
 
+async-trait.workspace = true
+chrono.workspace = true
+jsonschema.workspace = true
+metrics.workspace = true
+regex.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+serde-saphyr.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+toml.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# Dev shim replaying fixtures / misbehaving on purpose; integration tests find it
+# through `CARGO_BIN_EXE_fake-cli` (plan/11-testing.md §Worker adapter testing).
+[[bin]]
+name = "fake-cli"
+path = "tests/bin/fake-cli.rs"
+doc = false
+test = false

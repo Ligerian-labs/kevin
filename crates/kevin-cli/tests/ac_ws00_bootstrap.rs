@@ -117,7 +117,7 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
         ],
         &["db", "migrate"],
         &["config", "show"],
-        &["workers", "doctor"],
+        // `workers doctor` is implemented by WS-05 (see ac_ws05_workers.rs).
         &["routes"],
         &["routes", "explain", "--kind", "implement"],
         &["lessons"],
