@@ -1,0 +1,17 @@
+# Golden capture metadata (`plan/11-testing.md` §Fixtures and test data layout).
+kind = "opencode"
+fixture = "success.jsonl"
+source = "captured"
+cli_version = "1.18.15"
+model = "opencode/gemini-3.5-flash-lite"
+captured_at = "2026-08-22"
+# argv (message as the trailing positional; prompt is NOT read from stdin):
+#   opencode run --format json -m opencode/gemini-3.5-flash-lite --dir <tmp>
+#     "Read main.rs and reply with only the word it prints."
+# Scrubbing: the temp workspace path → /workspace, session/message/part ids and
+# tool callIDs → stable placeholders, `part.metadata.google.thoughtSignature` →
+# "<scrubbed>". Token counts, costs and timestamps are untouched.
+verified = ["step_start", "tool_use (state.status=completed)", "step_finish", "text"]
+# Totals of the capture, asserted by `ac_ws15_2_…`:
+#   input 13336, output 99, reasoning 405, cache.read 24542, cache.write 0
+#   cost 0.0041573 + 0.00088816 + 0.0009516 = 0.00599706 USD

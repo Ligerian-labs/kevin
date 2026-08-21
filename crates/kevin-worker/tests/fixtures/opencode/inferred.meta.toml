@@ -1,0 +1,55 @@
+# `plan/04-workers.md` marks the opencode `--format json` mapping as
+# `[inferred — verify]`. WS-15 verified it two ways against opencode 1.18.15:
+#
+# 1. one real capture (`success.jsonl`, see `success.meta.toml`);
+# 2. the `run` command's own emitter, read out of the shipped bundle:
+#      if (format === "json")
+#        process.stdout.write(JSON.stringify({ type, timestamp, sessionID, ...payload }) + "\n")
+#    called with type ∈ {tool_use, step_start, step_finish, text, reasoning, error}
+#    and payload {part} (or {error}). No other line type exists, and there is no
+#    terminal line at all: the emitter loop breaks on `session.status = idle`
+#    and the process exits (0, or 1 when a `session.error` was seen).
+#
+# The part schemas below are the shipped effect-schema definitions, so they are
+# verified, not inferred:
+#   TextPart      { id, sessionID, messageID, type: "text", text, synthetic?, ignored?, time?: { start, end? }, metadata? }
+#   ReasoningPart { …, type: "reasoning", text, metadata?, time: { start, end? } }
+#   ToolPart      { …, type: "tool", callID, tool, state, metadata? }
+#     ToolStateCompleted { status: "completed", input, output, title, metadata, time }
+#     ToolStateError     { status: "error", input, error, metadata?, time }
+#   StepStartPart  { …, type: "step-start", snapshot? }
+#   StepFinishPart { …, type: "step-finish", reason, snapshot?, cost, tokens: { total?, input, output, reasoning, cache: { read, write } } }
+#   NamedError     { name, data }  with names APIError { message, statusCode?, isRetryable, responseHeaders?, responseBody?, metadata? },
+#                                  ProviderAuthError { providerID, message }, MessageAbortedError { message },
+#                                  StructuredOutputError { message, retries }, ContextOverflowError { message, responseBody? },
+#                                  ContentFilterError { message }, MessageOutputLengthError {}
+cli_version = "1.18.15"
+
+[success]
+fixture = "success.jsonl"
+source = "captured"
+inferred = []
+
+[auth_error]
+fixture = "auth_error.jsonl"
+source = "captured"
+inferred = []
+note = "real `{\"type\":\"error\"}` line from a run against a provider with an invalid key (exit 1); response headers trimmed to one entry."
+
+[rate_limit]
+fixture = "rate_limit.jsonl"
+source = "handwritten"
+inferred = ["APIError.isRetryable = true on 429"]
+note = "envelope copied from `auth_error.jsonl`; only the status code, message and `isRetryable` differ. Maps to Failed{Transient}."
+
+[structured]
+fixture = "structured.jsonl"
+source = "handwritten"
+inferred = []
+note = "opencode `run` has no output-schema flag, so structured output always comes from `structured::extract_and_validate` on the final text (a fenced block with a trailing comma here, to exercise the repairs)."
+
+[tool_error]
+fixture = "tool_error.jsonl"
+source = "handwritten"
+inferred = ["ToolStateError.error is the message string"]
+note = "tool failure (ToolResult{ok:false}) followed by MessageAbortedError → Failed{Cancelled}."
