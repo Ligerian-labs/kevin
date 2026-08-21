@@ -1,0 +1,126 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.schema
+---
+{
+  "$id": "kevin.integration.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "diff",
+              "file",
+              "pr_url",
+              "report",
+              "json",
+              "transcript"
+            ]
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "uri"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "output_excerpt": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "command",
+          "passed"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "conflicts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 600,
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "branch",
+          "files",
+          "description"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "follow_up": {
+      "items": {
+        "maxLength": 300,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "merged": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "integrated",
+        "conflicts",
+        "failed",
+        "skipped"
+      ]
+    },
+    "summary": {
+      "maxLength": 600,
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "summary",
+    "merged",
+    "conflicts",
+    "checks",
+    "artifacts"
+  ],
+  "title": "Kevin integration report",
+  "type": "object"
+}

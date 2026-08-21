@@ -1,0 +1,126 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.schema
+---
+{
+  "$id": "kevin.plan.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "edges": {
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 2,
+        "minItems": 2,
+        "type": "array"
+      },
+      "type": "array"
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "tasks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "allow_push": {
+            "default": false,
+            "type": "boolean"
+          },
+          "custom_kind": {
+            "type": "string"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^t[0-9]{1,3}$",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "research",
+              "implement",
+              "test",
+              "review",
+              "refactor",
+              "debug",
+              "write",
+              "ops",
+              "custom"
+            ]
+          },
+          "optional": {
+            "default": false,
+            "type": "boolean"
+          },
+          "output_schema": {
+            "type": "object"
+          },
+          "parallel_safe": {
+            "default": true,
+            "type": "boolean"
+          },
+          "suggested_tier": {
+            "enum": [
+              "fast",
+              "balanced",
+              "frontier"
+            ]
+          },
+          "title": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "workspace_policy": {
+            "default": "isolated",
+            "enum": [
+              "isolated",
+              "shared",
+              "read_only"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "instructions",
+          "acceptance_criteria",
+          "depends_on"
+        ],
+        "type": "object"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "tasks",
+    "rationale"
+  ],
+  "title": "Kevin plan",
+  "type": "object"
+}

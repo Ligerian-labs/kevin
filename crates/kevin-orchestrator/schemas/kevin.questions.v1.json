@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kevin.questions.v1",
+  "title": "Kevin clarifier questions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "questions"
+  ],
+  "properties": {
+    "questions": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/proposed_question"
+      }
+    }
+  },
+  "$defs": {
+    "proposed_question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "options",
+        "why_it_matters",
+        "confidence_if_unasked"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "recommended": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "multi_select": {
+          "type": "boolean"
+        },
+        "why_it_matters": {
+          "type": "string"
+        },
+        "confidence_if_unasked": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kevin.plan.v1",
+  "title": "Kevin plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tasks", "rationale"],
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "kind", "instructions", "acceptance_criteria", "depends_on"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^t[0-9]{1,3}$" },
+          "title": { "type": "string", "maxLength": 120 },
+          "kind": {
+            "enum": [
+              "research",
+              "implement",
+              "test",
+              "review",
+              "refactor",
+              "debug",
+              "write",
+              "ops",
+              "custom"
+            ]
+          },
+          "custom_kind": { "type": "string" },
+          "instructions": { "type": "string" },
+          "acceptance_criteria": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "depends_on": { "type": "array", "items": { "type": "string" } },
+          "inputs": { "type": "array", "items": { "type": "string" } },
+          "suggested_tier": { "enum": ["fast", "balanced", "frontier"] },
+          "parallel_safe": { "type": "boolean", "default": true },
+          "workspace_policy": {
+            "enum": ["isolated", "shared", "read_only"],
+            "default": "isolated"
+          },
+          "optional": { "type": "boolean", "default": false },
+          "allow_push": { "type": "boolean", "default": false },
+          "output_schema": { "type": "object" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2 }
+    },
+    "rationale": { "type": "string" }
+  }
+}

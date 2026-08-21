@@ -1,0 +1,58 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.user
+---
+# Goal
+
+Add a /healthz endpoint that reports database connectivity.
+
+# Repository
+
+- name: kevin
+- root: /srv/repos/kevin
+- vcs: jj
+- base branch: main
+- languages: rust
+- top level: Cargo.toml, crates/, plan/
+- declared checks: just ci
+- cargo workspace with 16 crates
+
+# Approved plan
+
+Rationale: Implement first, then cover it.
+- t1 [implement] Add the /healthz route — depends on: nothing
+  - acceptance: GET /healthz returns 200
+- t2 [test] Cover /healthz with a test — depends on: t1
+  - acceptance: `cargo nextest run -p kevin-api` passes
+
+# Task outcomes to integrate
+
+- t1 [implement] Add the /healthz route — succeeded (branch kevin/9f2c/healthz-route)
+  Added the handler and wired it into the router.
+- t2 [test] Cover /healthz with a test — succeeded (branch kevin/9f2c/healthz-test)
+  Added an integration test.
+
+# Integration settings
+
+- mode: pr
+- base branch: main
+- pull requests: one for the whole run
+- declared checks: just ci
+
+# Acceptance criteria the run must satisfy
+
+- GET /healthz returns 200
+- `just ci` is green
+
+# Budget and cost hints
+
+- budget: 5.00 USD (spent so far: 0.42)
+- token budget: 2000000
+- wall-clock budget: 2h
+- at most 4 task attempts run at once
+
+# Your task
+
+Integrate the succeeded task branches and return the `kevin.integration.v1` document.
+
+Run mode `interactive`: a human is available, so questions block the run and the plan needs approval.

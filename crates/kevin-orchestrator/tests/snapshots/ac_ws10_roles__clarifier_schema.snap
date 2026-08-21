@@ -1,0 +1,72 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.schema
+---
+{
+  "$defs": {
+    "proposed_question": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence_if_unasked": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "multi_select": {
+          "type": "boolean"
+        },
+        "options": {
+          "items": {
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "recommended": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        },
+        "why_it_matters": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "options",
+        "why_it_matters",
+        "confidence_if_unasked"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "kevin.questions.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "questions": {
+      "items": {
+        "$ref": "#/$defs/proposed_question"
+      },
+      "maxItems": 10,
+      "type": "array"
+    }
+  },
+  "required": [
+    "questions"
+  ],
+  "title": "Kevin clarifier questions",
+  "type": "object"
+}
