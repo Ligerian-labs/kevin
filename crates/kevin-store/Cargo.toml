@@ -1,6 +1,6 @@
 [package]
 name = "kevin-store"
-description = "Postgres platform crate."
+description = "Postgres platform crate: event store, outbox, snapshots, processed commands, checkpoints, migrations."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,3 +16,19 @@ kevin-domain.workspace = true
 kevin-config.workspace = true
 kevin-telemetry.workspace = true
 
+async-trait.workspace = true
+chrono.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+kevin-testkit = { workspace = true, features = ["pg"] }
+anyhow.workspace = true
+tokio = { workspace = true, features = ["full"] }
