@@ -1,0 +1,18 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "class": "permanent",
+  "message": "t1 failed permanently",
+  "reason": "task_failed",
+  "type": "run.failed",
+  "usage": {
+    "cache_read_tokens": 50,
+    "cache_write_tokens": 10,
+    "cost_usd": "0.25",
+    "input_tokens": 1000,
+    "output_tokens": 200,
+    "wall_ms": 1500
+  }
+}

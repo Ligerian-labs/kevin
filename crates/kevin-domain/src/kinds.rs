@@ -5,6 +5,8 @@
 //! - [`ModelAlias`] — validated config-level model name (`[models.<alias>]`).
 //! - [`Effort`] — reasoning effort requested from a worker.
 //! - [`FailureClass`] — why an attempt failed; decides retry policy.
+//! - [`Complexity`] — low/medium/high estimate from the understanding phase.
+//! - [`Tier`] — fast/balanced/frontier model tier.
 
 use std::fmt;
 use std::str::FromStr;
@@ -441,6 +443,145 @@ impl FromStr for FailureClass {
     }
 }
 
+impl FailureClass {
+    /// Whether the retry policy may start another attempt after this failure
+    /// (`plan/05-orchestration.md` §3.5): `Transient` and `RuntimeRestarted`
+    /// are not the model's fault; `Permanent`, `Budget` and `Cancelled` are final.
+    #[must_use]
+    pub const fn is_retryable(self) -> bool {
+        matches!(
+            self,
+            FailureClass::Transient | FailureClass::RuntimeRestarted
+        )
+    }
+
+    /// Whether this failure counts against the model in routing scores
+    /// (`plan/06-memory-and-learning.md` §2.4): only `Permanent` and `Budget`.
+    #[must_use]
+    pub const fn blames_model(self) -> bool {
+        matches!(self, FailureClass::Permanent | FailureClass::Budget)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Complexity
+// ---------------------------------------------------------------------------
+
+/// Estimated complexity of a goal or task (`kevin.understanding.v1` `complexity`);
+/// the router maps it to an effort and a preferred tier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Complexity {
+    /// Small, local change.
+    Low,
+    /// Typical feature-sized work.
+    Medium,
+    /// Cross-cutting or risky work.
+    High,
+}
+
+impl Complexity {
+    /// Every complexity, lowest first.
+    pub const ALL: [Complexity; 3] = [Complexity::Low, Complexity::Medium, Complexity::High];
+
+    /// Lowercase name, identical to the serde form.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Complexity::Low => "low",
+            Complexity::Medium => "medium",
+            Complexity::High => "high",
+        }
+    }
+
+    /// Default effort for an attempt of this complexity
+    /// (`plan/06-memory-and-learning.md` §2.2 step 6).
+    #[must_use]
+    pub const fn default_effort(self) -> Effort {
+        match self {
+            Complexity::Low => Effort::Medium,
+            Complexity::Medium => Effort::High,
+            Complexity::High => Effort::XHigh,
+        }
+    }
+}
+
+impl fmt::Display for Complexity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Error returned when a string names no complexity.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("unknown complexity {0:?}: expected one of low, medium, high")]
+pub struct UnknownComplexity(pub String);
+
+impl FromStr for Complexity {
+    type Err = UnknownComplexity;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Complexity::ALL
+            .into_iter()
+            .find(|c| c.as_str() == s)
+            .ok_or_else(|| UnknownComplexity(s.to_owned()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tier
+// ---------------------------------------------------------------------------
+
+/// Price/capability tier of a model alias (`[models.<alias>].tier`) and the
+/// planner's `suggested_tier` hint in `kevin.plan.v1`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Tier {
+    /// Cheap and quick.
+    Fast,
+    /// Default trade-off.
+    Balanced,
+    /// Most capable, most expensive.
+    Frontier,
+}
+
+impl Tier {
+    /// Every tier, cheapest first.
+    pub const ALL: [Tier; 3] = [Tier::Fast, Tier::Balanced, Tier::Frontier];
+
+    /// Lowercase name, identical to the serde form.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Tier::Fast => "fast",
+            Tier::Balanced => "balanced",
+            Tier::Frontier => "frontier",
+        }
+    }
+}
+
+impl fmt::Display for Tier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Error returned when a string names no tier.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("unknown tier {0:?}: expected one of fast, balanced, frontier")]
+pub struct UnknownTier(pub String);
+
+impl FromStr for Tier {
+    type Err = UnknownTier;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Tier::ALL
+            .into_iter()
+            .find(|t| t.as_str() == s)
+            .ok_or_else(|| UnknownTier(s.to_owned()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -563,5 +704,35 @@ mod tests {
             assert_eq!(class.as_str().parse::<FailureClass>().unwrap(), class);
         }
         assert!("flaky".parse::<FailureClass>().is_err());
+    }
+
+    #[test]
+    fn complexity_and_tier_serde_lowercase() {
+        for c in Complexity::ALL {
+            let json = serde_json::to_string(&c).unwrap();
+            assert_eq!(json, format!("\"{c}\""));
+            assert_eq!(serde_json::from_str::<Complexity>(&json).unwrap(), c);
+            assert_eq!(c.as_str().parse::<Complexity>().unwrap(), c);
+        }
+        for t in Tier::ALL {
+            let json = serde_json::to_string(&t).unwrap();
+            assert_eq!(json, format!("\"{t}\""));
+            assert_eq!(serde_json::from_str::<Tier>(&json).unwrap(), t);
+            assert_eq!(t.as_str().parse::<Tier>().unwrap(), t);
+        }
+        assert!("extreme".parse::<Complexity>().is_err());
+        assert!("premium".parse::<Tier>().is_err());
+        assert_eq!(Complexity::High.default_effort(), Effort::XHigh);
+    }
+
+    #[test]
+    fn failure_class_retry_policy() {
+        assert!(FailureClass::Transient.is_retryable());
+        assert!(FailureClass::RuntimeRestarted.is_retryable());
+        assert!(!FailureClass::Permanent.is_retryable());
+        assert!(!FailureClass::Budget.is_retryable());
+        assert!(!FailureClass::Cancelled.is_retryable());
+        assert!(FailureClass::Permanent.blames_model());
+        assert!(!FailureClass::Transient.blames_model());
     }
 }

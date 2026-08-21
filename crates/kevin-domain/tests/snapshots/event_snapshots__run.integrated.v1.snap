@@ -1,0 +1,17 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "artifacts": [
+    {
+      "bytes": 1234,
+      "id": "01910000-0000-7000-8000-000000002001",
+      "kind": "diff",
+      "sha256": "deadbeef",
+      "uri": "artifact://diff-1"
+    }
+  ],
+  "summary": "PR #42 opened",
+  "type": "run.integrated"
+}

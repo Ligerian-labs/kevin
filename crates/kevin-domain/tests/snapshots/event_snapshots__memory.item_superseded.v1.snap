@@ -1,0 +1,8 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "superseded_by": "01910000-0000-7000-8000-000000001002",
+  "type": "memory.item_superseded"
+}

@@ -1,0 +1,8 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "reason": "run cancelled",
+  "type": "task.cancelled"
+}

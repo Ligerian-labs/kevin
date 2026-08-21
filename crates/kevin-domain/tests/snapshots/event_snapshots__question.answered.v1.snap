@@ -1,0 +1,14 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "answer": {
+    "answered_by": "valentin",
+    "selected": [
+      "no"
+    ]
+  },
+  "answered_by": "valentin",
+  "type": "question.answered"
+}

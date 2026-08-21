@@ -1,0 +1,23 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "attempt_id": "01910000-0000-7000-8000-000000000c01",
+  "attempt_no": 1,
+  "route": {
+    "effort": "medium",
+    "model": "sonnet5-claude",
+    "worker": "claude"
+  },
+  "type": "task.attempt_started",
+  "worker_session_id": "sess-1",
+  "workspace": {
+    "base_rev": "abc123",
+    "kind": {
+      "branch": "kevin/t1",
+      "type": "git_worktree"
+    },
+    "root": "/repo/.kevin/workspaces/t1"
+  }
+}

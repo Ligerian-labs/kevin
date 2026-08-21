@@ -11,7 +11,8 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::ids::{
-    AttemptId, CommandId, EvaluationId, EventId, MemoryItemId, QuestionId, RunId, TaskId,
+    ArtifactId, AttemptId, CommandId, EvaluationId, EventId, MemoryItemId, ProposalId, QuestionId,
+    RunId, TaskId,
 };
 
 /// Source of the current time.
@@ -68,6 +69,14 @@ pub trait IdGen: Send + Sync {
     /// Fresh [`EvaluationId`].
     fn evaluation_id(&self) -> EvaluationId {
         EvaluationId::from_uuid(self.next_id())
+    }
+    /// Fresh [`ArtifactId`].
+    fn artifact_id(&self) -> ArtifactId {
+        ArtifactId::from_uuid(self.next_id())
+    }
+    /// Fresh [`ProposalId`].
+    fn proposal_id(&self) -> ProposalId {
+        ProposalId::from_uuid(self.next_id())
     }
     /// Fresh [`MemoryItemId`].
     fn memory_item_id(&self) -> MemoryItemId {

@@ -1,0 +1,10 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "actual": "7300000",
+  "dimension": "wall",
+  "limit": "7200000",
+  "type": "run.budget_exhausted"
+}

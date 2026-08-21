@@ -1,0 +1,11 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "task_ids": [
+    "01910000-0000-7000-8000-000000000b01",
+    "01910000-0000-7000-8000-000000000b02"
+  ],
+  "type": "run.execution_started"
+}

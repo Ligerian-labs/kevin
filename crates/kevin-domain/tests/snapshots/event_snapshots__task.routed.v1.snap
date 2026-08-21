@@ -1,0 +1,21 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "route": {
+    "effort": "medium",
+    "model": "sonnet5-claude",
+    "worker": "claude"
+  },
+  "selection": {
+    "candidates": [
+      "sonnet5-claude"
+    ],
+    "policy": "fixed",
+    "scores": [
+      1.0
+    ]
+  },
+  "type": "task.routed"
+}

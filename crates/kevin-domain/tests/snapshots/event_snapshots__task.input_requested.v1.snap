@@ -1,0 +1,9 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "attempt_id": "01910000-0000-7000-8000-000000000c01",
+  "question_id": "01910000-0000-7000-8000-000000000d01",
+  "type": "task.input_requested"
+}

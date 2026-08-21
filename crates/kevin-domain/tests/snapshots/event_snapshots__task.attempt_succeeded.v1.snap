@@ -1,0 +1,26 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "artifacts": [
+    {
+      "bytes": 1234,
+      "id": "01910000-0000-7000-8000-000000002001",
+      "kind": "diff",
+      "sha256": "deadbeef",
+      "uri": "artifact://diff-1"
+    }
+  ],
+  "attempt_id": "01910000-0000-7000-8000-000000000c01",
+  "summary": "done",
+  "type": "task.attempt_succeeded",
+  "usage": {
+    "cache_read_tokens": 50,
+    "cache_write_tokens": 10,
+    "cost_usd": "0.25",
+    "input_tokens": 1000,
+    "output_tokens": 200,
+    "wall_ms": 1500
+  }
+}

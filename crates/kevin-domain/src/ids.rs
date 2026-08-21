@@ -125,6 +125,14 @@ define_id!(
     /// Identifier of a command; doubles as the idempotency key in `core.processed_commands`.
     CommandId
 );
+define_id!(
+    /// Identifier of an artifact produced by a task (`ArtifactRef::id`).
+    ArtifactId
+);
+define_id!(
+    /// Identifier of a proposal raised by an evaluation (`Proposal::id`).
+    ProposalId
+);
 
 #[cfg(test)]
 mod tests {

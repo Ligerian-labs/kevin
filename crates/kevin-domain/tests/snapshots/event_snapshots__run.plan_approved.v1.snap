@@ -1,0 +1,8 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "by": "valentin",
+  "type": "run.plan_approved"
+}

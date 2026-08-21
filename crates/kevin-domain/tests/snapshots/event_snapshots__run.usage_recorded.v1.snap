@@ -1,0 +1,24 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "run_usage": {
+    "cache_read_tokens": 150,
+    "cache_write_tokens": 30,
+    "cost_usd": "0.75",
+    "input_tokens": 3000,
+    "output_tokens": 600,
+    "wall_ms": 4500
+  },
+  "task_id": "01910000-0000-7000-8000-000000000b01",
+  "task_usage": {
+    "cache_read_tokens": 50,
+    "cache_write_tokens": 10,
+    "cost_usd": "0.25",
+    "input_tokens": 1000,
+    "output_tokens": 200,
+    "wall_ms": 1500
+  },
+  "type": "run.usage_recorded"
+}

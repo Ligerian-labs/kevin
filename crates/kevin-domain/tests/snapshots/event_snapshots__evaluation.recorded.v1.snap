@@ -1,0 +1,52 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "evaluation_id": "01910000-0000-7000-8000-0000000000e1",
+  "judge_route": {
+    "effort": "xhigh",
+    "model": "opus5-claude",
+    "worker": "claude"
+  },
+  "lessons": [
+    "Add a health check test alongside the route."
+  ],
+  "overall": 0.8500000238418579,
+  "proposals": [
+    {
+      "body": "prefer gpt56-codex for test tasks",
+      "id": "01910000-0000-7000-8000-000000000f01",
+      "kind": "routing",
+      "rationale": "faster and cheaper on this repo",
+      "status": "proposed"
+    }
+  ],
+  "rubric_id": "default",
+  "scores": [
+    {
+      "criterion": "correctness",
+      "rationale": "works",
+      "score": 9
+    },
+    {
+      "criterion": "completeness",
+      "rationale": "one criterion unverified",
+      "score": 7
+    }
+  ],
+  "subject": {
+    "id": "01910000-0000-7000-8000-0000000000a1",
+    "type": "run"
+  },
+  "type": "evaluation.recorded",
+  "usage": {
+    "cache_read_tokens": 50,
+    "cache_write_tokens": 10,
+    "cost_usd": "0.25",
+    "input_tokens": 1000,
+    "output_tokens": 200,
+    "wall_ms": 1500
+  },
+  "verdict": "accept"
+}

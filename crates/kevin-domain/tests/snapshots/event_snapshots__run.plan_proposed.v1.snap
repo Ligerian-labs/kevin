@@ -1,0 +1,51 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "plan": {
+    "rationale": "small change, two steps",
+    "tasks": [
+      {
+        "acceptance_criteria": [
+          "done"
+        ],
+        "allow_push": false,
+        "depends_on": [],
+        "id": "t1",
+        "instructions": "",
+        "kind": "implement",
+        "optional": false,
+        "parallel_safe": true,
+        "title": "Implement /healthz",
+        "workspace_policy": "isolated"
+      },
+      {
+        "acceptance_criteria": [
+          "done"
+        ],
+        "allow_push": false,
+        "depends_on": [
+          "t1"
+        ],
+        "id": "t2",
+        "instructions": "",
+        "kind": "test",
+        "optional": false,
+        "parallel_safe": true,
+        "title": "Test /healthz",
+        "workspace_policy": "isolated"
+      }
+    ]
+  },
+  "revision": 0,
+  "type": "run.plan_proposed",
+  "usage": {
+    "cache_read_tokens": 50,
+    "cache_write_tokens": 10,
+    "cost_usd": "0.25",
+    "input_tokens": 1000,
+    "output_tokens": 200,
+    "wall_ms": 1500
+  }
+}

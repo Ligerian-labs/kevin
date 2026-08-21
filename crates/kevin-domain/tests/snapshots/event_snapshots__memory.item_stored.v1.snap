@@ -1,0 +1,26 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "content": "Add a health check test alongside the route.",
+  "created_at": "2026-01-01T00:00:00Z",
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "importance": 0.5,
+  "kind": "lesson",
+  "memory_item_id": "01910000-0000-7000-8000-000000001001",
+  "scope": "repo:abc",
+  "source": {
+    "actor": {
+      "component": "evaluator",
+      "type": "system"
+    },
+    "evaluation_id": "01910000-0000-7000-8000-0000000000e1",
+    "run_id": "01910000-0000-7000-8000-0000000000a1"
+  },
+  "tags": [
+    "implement",
+    "repo:abc"
+  ],
+  "type": "memory.item_stored"
+}

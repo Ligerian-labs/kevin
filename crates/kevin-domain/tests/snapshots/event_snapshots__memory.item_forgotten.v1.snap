@@ -1,0 +1,8 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "reason": "contains a secret",
+  "type": "memory.item_forgotten"
+}

@@ -1,0 +1,12 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "planner_route": {
+    "effort": "xhigh",
+    "model": "opus5-claude",
+    "worker": "claude"
+  },
+  "type": "run.understanding_started"
+}

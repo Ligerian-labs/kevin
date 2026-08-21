@@ -1,0 +1,31 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "default": {
+    "answered_by": "default",
+    "selected": [
+      "yes"
+    ]
+  },
+  "multi_select": false,
+  "options": [
+    {
+      "label": "yes",
+      "recommended": true
+    },
+    {
+      "label": "no",
+      "recommended": false
+    }
+  ],
+  "policy": {
+    "timeout": 600000,
+    "type": "default_after"
+  },
+  "question_id": "01910000-0000-7000-8000-000000000d01",
+  "run_id": "01910000-0000-7000-8000-0000000000a1",
+  "text": "Should /healthz check the database?",
+  "type": "question.asked"
+}

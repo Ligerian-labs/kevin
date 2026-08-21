@@ -1,0 +1,17 @@
+---
+source: crates/kevin-domain/tests/event_snapshots.rs
+expression: value
+---
+{
+  "evaluation_skipped": false,
+  "summary": "healthz added and tested",
+  "type": "run.completed",
+  "usage": {
+    "cache_read_tokens": 200,
+    "cache_write_tokens": 40,
+    "cost_usd": "1.00",
+    "input_tokens": 4000,
+    "output_tokens": 800,
+    "wall_ms": 6000
+  }
+}
