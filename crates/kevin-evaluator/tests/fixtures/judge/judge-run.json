@@ -1,0 +1,13 @@
+{
+  "scores": [
+    { "criterion": "correctness", "score": 8, "rationale": "The integrated branch satisfies every success criterion named in the understanding." },
+    { "criterion": "completeness", "score": 7, "rationale": "One follow-up task was left open and is listed in the summary." },
+    { "criterion": "quality", "score": 8, "rationale": "The change is contained and the PR description explains it." },
+    { "criterion": "safety", "score": 9, "rationale": "No files outside the declared scope were touched." },
+    { "criterion": "efficiency", "score": 6, "rationale": "Two re-plans for a small run." }
+  ],
+  "overall": 0.8,
+  "verdict": "accept_with_fixes",
+  "lessons": ["Name the success criterion each task satisfies in its report."],
+  "proposals": []
+}

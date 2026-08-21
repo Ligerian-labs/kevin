@@ -1,0 +1,34 @@
+# Built-in rubric: `code` (plan/06-memory-and-learning.md §3.1).
+# Used for task kinds implement | test | refactor | debug.
+id = "code"
+description = "Rubric for code-producing tasks (implement, test, refactor, debug)."
+
+[[criteria]]
+key = "correctness"
+weight = 0.25
+description = "The change does what the task asked; no logic errors."
+
+[[criteria]]
+key = "completeness"
+weight = 0.20
+description = "Every acceptance criterion is demonstrably met."
+
+[[criteria]]
+key = "code_quality"
+weight = 0.15
+description = "Readable, idiomatic, maintainable; fits the surrounding code."
+
+[[criteria]]
+key = "test_coverage"
+weight = 0.15
+description = "Tests added or updated and passing."
+
+[[criteria]]
+key = "safety"
+weight = 0.15
+description = "No destructive/unsafe actions; secrets untouched; scope respected."
+
+[[criteria]]
+key = "efficiency"
+weight = 0.10
+description = "Cost and wall-clock reasonable for the task size."

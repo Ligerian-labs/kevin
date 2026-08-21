@@ -1,0 +1,14 @@
+{
+  "scores": [
+    { "criterion": "correctness", "score": 4, "rationale": "The endpoint is registered but never returns a body." },
+    { "criterion": "completeness", "score": 4, "rationale": "The second acceptance criterion has no evidence." },
+    { "criterion": "code_quality", "score": 4, "rationale": "Copied handler with a dead branch." },
+    { "criterion": "test_coverage", "score": 4, "rationale": "No test was added or updated." },
+    { "criterion": "safety", "score": 4, "rationale": "Touched files outside the task scope." },
+    { "criterion": "efficiency", "score": 4, "rationale": "Six attempts for a one-line change." }
+  ],
+  "overall": 0.9,
+  "verdict": "accept",
+  "lessons": ["State which acceptance criterion each change satisfies."],
+  "proposals": []
+}
