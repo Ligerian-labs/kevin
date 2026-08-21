@@ -72,6 +72,8 @@ pub struct RegistryConfig {
     pub claude: kevin_config::ClaudeWorker,
     /// `[workers.codex]` in full (the adapter needs its kind-specific keys).
     pub codex: kevin_config::CodexWorker,
+    /// `[workers.opencode]` in full (the adapter needs its kind-specific keys).
+    pub opencode: kevin_config::OpencodeWorker,
     /// `workers.fake.script` (`None` when empty → built-in scenario).
     pub fake_script: Option<PathBuf>,
     /// `[models.*]`.
@@ -148,6 +150,7 @@ impl From<&KevinConfig> for RegistryConfig {
             ]),
             claude: w.claude.clone(),
             codex: w.codex.clone(),
+            opencode: w.opencode.clone(),
             fake_script: (!w.fake.script.as_os_str().is_empty()).then(|| w.fake.script.clone()),
             models: cfg.models.clone(),
             env_allowlist_extra: cfg.sandbox.env_allowlist_extra.clone(),
@@ -271,8 +274,13 @@ fn builtin_factory(kind: WorkerKind) -> Option<WorkerFactory> {
             codex.set_bin(&worker.bin);
             Ok(Arc::new(codex) as Arc<dyn Worker>)
         })),
-        // TODO(ws-14): pi; TODO(ws-15): opencode.
-        WorkerKind::Pi | WorkerKind::Opencode => None,
+        WorkerKind::Opencode => Some(Arc::new(|cfg, worker, policy| {
+            let mut opencode = crate::opencode::OpencodeWorker::from_registry_config(cfg, policy)?;
+            opencode.set_bin(&worker.bin);
+            Ok(Arc::new(opencode) as Arc<dyn Worker>)
+        })),
+        // TODO(ws-14): pi.
+        WorkerKind::Pi => None,
     }
 }
 

@@ -222,11 +222,48 @@ opencode run --format json
   <message>
 ```
 
-`--auto` is a `PolicyViolation` unless `sandbox.tier = "container"`. Event
-mapping for `--format json` `[inferred — verify]`: `message.part.updated` text
-parts → `AssistantText`; tool parts → `ToolCall`/`ToolResult`; `session.idle` /
-final message → `Final`; usage from message metadata → `Usage`. Session id from
-the first event → `Started`.
+`--auto` is a `PolicyViolation` unless `sandbox.tier = "container"`.
+
+`opencode run` has neither a system-prompt flag nor an output-schema flag: the
+Kevin briefing *and* the "respond with only a JSON object matching this schema"
+instruction both ride in the trailing `<message>` positional. Nothing is read
+from stdin.
+
+Event mapping (verified, `opencode` 1.18.15). The emitter writes one
+`{type, timestamp, sessionID, …payload}` object per line with
+`type ∈ {step_start, tool_use, step_finish, text, reasoning, error}`:
+`text` part → `AssistantText`; `reasoning` part → `Thinking` (only with
+`--thinking`); `tool_use` → `ToolCall` **and** `ToolResult` on the same line
+(the line is emitted once, already carrying the tool's terminal
+`state.status ∈ {completed, error}`); `step_finish` → `Usage`; `error` →
+`Failed`. `step_start` is transcript-only. Session id from the `sessionID` of
+the first line → `Started`.
+
+**There is no terminal line.** The emitter loop breaks when the session goes
+idle and the process exits — 0 normally, 1 once a `session.error` was seen (and
+stderr stays empty). The adapter therefore synthesises the single `Final` after
+exit, treats "a step finished and no `error` line arrived" as `saw_final`, and
+lets an `error` line override the generic exit-code verdict. `Final.text` is
+the concatenated `text` parts of the *last* assistant message; `structured` is
+extracted from it (falling back to the whole transcript text) and validated.
+
+Usage: `step-finish.tokens` is `{total?, input, output, reasoning, cache:{read,
+write}}` per step, with `total = input + output + reasoning + cache.read`;
+`reasoning` is *not* part of `output`, so Kevin adds it to `output_tokens`
+exactly as `opencode stats` does. `step-finish.cost` is a per-step USD amount,
+so opencode is — with claude — a worker that reports cost and the router price
+table is only a fallback.
+
+Failure classes come from the shipped `NamedError` variants (`APIError`,
+`ProviderAuthError`, `MessageAbortedError`, `StructuredOutputError`,
+`ContextOverflowError`, `ContentFilterError`, `MessageOutputLengthError`):
+`MessageAbortedError` → `Cancelled`; otherwise `error.data.isRetryable` decides,
+then the HTTP status, then a rate-limit/network signature in the message.
+
+Doctor: `opencode --version`, then auth offline — a provider API key in the
+environment, else `$XDG_DATA_HOME/opencode/auth.json` (or
+`~/.local/share/opencode/auth.json`), else the credential count printed by
+`opencode providers list`, which only reads the local store.
 
 ## Adapter: `fake`
 
@@ -270,7 +307,7 @@ Kohral conformance suite need no model.
 | claude | `message.usage`, `result.usage` | `total_cost_usd` from result | `--session-id` / `--resume` | none (alias) |
 | codex | `turn.completed.usage` | price table | `codex exec resume <thread_id>` | `-c model_reasoning_effort` (1:1, `max` included) |
 | pi | usage block `[inferred — verify]` | price table | `--session-id` | `--thinking` |
-| opencode | message metadata `[inferred — verify]` | price table | `-s <id>` | `--variant` |
+| opencode | `step-finish.tokens` per step (reasoning added to output) | `step-finish.cost` per step | `-s <id>` | `--variant` |
 | fake | scripted | 0 | n/a | ignored |
 
 Cost fallback: `Usage.cost_usd = None` from the worker → orchestrator asks
@@ -299,7 +336,8 @@ impl WorkerRegistry {
 exits 1 if any *enabled* worker is missing or a role alias is unusable.
 Auth readiness: claude → `claude auth status` or `~/.claude` credentials present
 `[inferred — verify]`; codex → `$CODEX_HOME/auth.json` or `OPENAI_API_KEY`; pi →
-`pi auth check`; opencode → `opencode providers list` `[inferred — verify]`.
+`pi auth check`; opencode → a provider API key, `~/.local/share/opencode/auth.json`,
+or the credential count of `opencode providers list` (verified, 1.18.15).
 
 ## Testing
 
