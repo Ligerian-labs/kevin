@@ -1,6 +1,6 @@
 [package]
 name = "kevin-bus"
-description = "Event bus platform crate."
+description = "Event bus platform crate: EventBus trait, in-process broadcast bus, Postgres LISTEN/NOTIFY bus with store catch-up."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,3 +16,18 @@ kevin-domain.workspace = true
 kevin-config.workspace = true
 kevin-telemetry.workspace = true
 
+async-trait.workspace = true
+futures.workspace = true
+metrics.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+kevin-testkit.workspace = true
+chrono.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
