@@ -26,11 +26,12 @@ kevin-evaluator.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 metrics.workspace = true
+rust_decimal.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
@@ -39,4 +40,5 @@ uuid.workspace = true
 kevin-testkit = { workspace = true, features = ["pg"] }
 insta.workspace = true
 jsonschema.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
