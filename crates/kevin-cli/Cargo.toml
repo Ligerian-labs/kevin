@@ -32,6 +32,7 @@ kevin-kohral.workspace = true
 kevin-tui.workspace = true
 
 anyhow.workspace = true
+chrono.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 serde_json.workspace = true
@@ -40,7 +41,9 @@ tokio.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
+chrono.workspace = true
 kevin-testkit = { workspace = true, features = ["pg"] }
+sqlx.workspace = true
 predicates.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true

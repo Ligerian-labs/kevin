@@ -36,4 +36,5 @@ Current allocation:
 |---|---|---|---|
 | 0001 | `0001_core.sql` | `core` (+ `vector` extension) | WS-03 |
 | 0002 | `0002_orch.sql` | `orch` (projections / read models) | WS-11 |
+| 0003 | `0003_routing.sql` | `routing` | WS-09 |
 | 0004 | `0004_memory.sql` | `memory` | WS-18 |
