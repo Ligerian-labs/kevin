@@ -21,6 +21,11 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
 ignore = [
   # "RUSTSEC-0000-0000", # reason + link to tracking issue
+  # `paste` is unmaintained (no vulnerability). It reaches us only through
+  # tokenizers -> fastembed (kevin-memory's local embeddings, ADR 0004), is a
+  # compile-time-only proc macro, and has no safe upgrade yet. Revisit when
+  # tokenizers moves to `pastey`: https://github.com/huggingface/tokenizers
+  "RUSTSEC-2024-0436",
 ]
 
 [licenses]
