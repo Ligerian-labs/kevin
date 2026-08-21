@@ -20,9 +20,12 @@ pg = ["dep:kevin-store", "dep:sqlx", "dep:tokio"]
 kevin-domain.workspace = true
 kevin-bus.workspace = true
 kevin-store = { workspace = true, optional = true }
+kevin-worker.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
+tokio-util.workspace = true
 uuid.workspace = true
 sqlx = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
