@@ -1,0 +1,17 @@
+[package]
+name = "kevin-testkit"
+description = "Test helpers for Kevin crates (dev-dependency only): clock/id fakes, Postgres harness, fake worker, fake API, given/when/then."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kevin-domain.workspace = true
+chrono.workspace = true
+uuid.workspace = true

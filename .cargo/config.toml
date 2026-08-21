@@ -1,0 +1,5 @@
+# Workspace cargo configuration. Keep it boring: machine-specific settings
+# (linkers, target dirs, registries) belong in ~/.cargo/config.toml.
+[alias]
+lint = "clippy --workspace --all-targets --all-features -- -D warnings"
+nt = "nextest run --workspace --all-features"

@@ -1,0 +1,8 @@
+# Workspace clippy configuration (lint levels live in Cargo.toml [workspace.lints]).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true
+too-many-arguments-threshold = 8
+too-many-lines-threshold = 150
+doc-valid-idents = ["..", "OpenAI", "OpenAPI", "Kohral", "pgvector", "JSONL", "PostgreSQL"]

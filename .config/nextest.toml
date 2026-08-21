@@ -1,0 +1,9 @@
+# cargo-nextest configuration (plan/11-testing.md: per-test timeouts, CI profile).
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 2 }
+fail-fast = false
+
+[profile.ci]
+slow-timeout = { period = "60s", terminate-after = 5 }
+fail-fast = false
+failure-output = "immediate-final"

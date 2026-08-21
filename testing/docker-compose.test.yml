@@ -1,0 +1,25 @@
+# Ephemeral pgvector Postgres for the test suite (tmpfs, no volume).
+#
+#   podman compose -f testing/docker-compose.test.yml up -d --wait
+#   DATABASE_URL=postgres://kevin:kevin@localhost:5433/kevin just test
+#
+# Tests create their own databases from a template (plan/11-testing.md), so a
+# single instance serves parallel test binaries. Host port: KEVIN_TEST_PG_PORT (default 5433).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: kevin-pg-test
+    environment:
+      POSTGRES_USER: kevin
+      POSTGRES_PASSWORD: kevin
+      POSTGRES_DB: kevin
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    ports:
+      - "${KEVIN_TEST_PG_PORT:-5433}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kevin -d kevin"]
+      interval: 2s
+      timeout: 5s
+      retries: 15

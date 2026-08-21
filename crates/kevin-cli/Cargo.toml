@@ -1,0 +1,42 @@
+[package]
+name = "kevin-cli"
+description = "The `kevin` binary: CLI entry point wiring every Kevin crate."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "kevin"
+path = "src/main.rs"
+
+[dependencies]
+kevin-domain.workspace = true
+kevin-config.workspace = true
+kevin-telemetry.workspace = true
+kevin-store.workspace = true
+kevin-bus.workspace = true
+kevin-workspace.workspace = true
+kevin-worker.workspace = true
+kevin-router.workspace = true
+kevin-memory.workspace = true
+kevin-evaluator.workspace = true
+kevin-orchestrator.workspace = true
+kevin-api = { workspace = true, features = ["server", "client"] }
+kevin-kohral.workspace = true
+kevin-tui.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true

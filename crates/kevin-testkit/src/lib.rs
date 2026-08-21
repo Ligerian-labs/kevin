@@ -1,0 +1,20 @@
+//! Test kit for the Kevin workspace (`plan/11-testing.md`).
+//!
+//! **Dev-dependency only.** Add it as
+//! `[dev-dependencies] kevin-testkit.workspace = true`; production crates must
+//! never depend on it (it will grow heavy dependencies such as testcontainers).
+//!
+//! Module map (stubs are filled in by the owning workstream):
+//! - [`clock`] — `FixedClock`, `SeqIdGen` (WS-00, implemented here).
+//! - [`pg`] — `TestDb` per-test Postgres databases from a template (WS-03).
+//! - [`fake_worker`] — fake worker scenarios and helpers (WS-05).
+//! - [`fake_api`] — in-process fake of the HTTP API for client/TUI tests (WS-16).
+//! - [`given_when_then`] — aggregate given/when/then helpers (WS-01).
+
+pub mod clock;
+pub mod fake_api;
+pub mod fake_worker;
+pub mod given_when_then;
+pub mod pg;
+
+pub use clock::{FakeClock, FixedClock, SeqIdGen};

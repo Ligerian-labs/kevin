@@ -4,3 +4,7 @@
 /.kevin/
 **/*.orig
 .DS_Store
+**/target/
+.env
+.env.*
+*.pending-snap

@@ -1,0 +1,112 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/Ligerian-labs/kevin"
+homepage = "https://github.com/Ligerian-labs/kevin"
+authors = ["Ligerian Labs"]
+publish = false
+
+[workspace.dependencies]
+# --- internal crates (dependency direction: see plan/01-architecture.md) ---
+kevin-domain = { path = "crates/kevin-domain" }
+kevin-config = { path = "crates/kevin-config" }
+kevin-store = { path = "crates/kevin-store" }
+kevin-bus = { path = "crates/kevin-bus" }
+kevin-telemetry = { path = "crates/kevin-telemetry" }
+kevin-workspace = { path = "crates/kevin-workspace" }
+kevin-worker = { path = "crates/kevin-worker" }
+kevin-router = { path = "crates/kevin-router" }
+kevin-memory = { path = "crates/kevin-memory" }
+kevin-evaluator = { path = "crates/kevin-evaluator" }
+kevin-orchestrator = { path = "crates/kevin-orchestrator" }
+kevin-api = { path = "crates/kevin-api", default-features = false }
+kevin-kohral = { path = "crates/kevin-kohral" }
+kevin-tui = { path = "crates/kevin-tui" }
+kevin-testkit = { path = "crates/kevin-testkit" }
+
+# --- runtime / async ---
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "process", "signal", "io-util", "fs"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tokio-stream = "0.1"
+futures = "0.3"
+async-trait = "0.1"
+
+# --- serialization / data ---
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.1"
+uuid = { version = "1.24", features = ["v7", "serde", "std"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+rust_decimal = { version = "1.42", default-features = false, features = ["serde-with-str", "std"] }
+bytes = "1.12"
+url = { version = "2.5", features = ["serde"] }
+regex = "1.13"
+humantime = "2.4"
+secrecy = { version = "0.10", features = ["serde"] }
+
+# --- errors / logging / metrics ---
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+metrics = "0.24"
+
+# --- config ---
+figment = { version = "0.10", features = ["toml", "env"] }
+
+# --- storage ---
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "uuid", "chrono", "json", "macros"] }
+pgvector = { version = "0.4", features = ["sqlx"] }
+
+# --- http / api / client ---
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.7", features = ["trace", "timeout", "request-id", "cors", "limit"] }
+utoipa = { version = "5.5", features = ["axum_extras", "uuid", "chrono", "decimal"] }
+utoipa-axum = "0.2"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+# --- cli / tui ---
+clap = { version = "4.6", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4.6"
+comfy-table = "8.0"
+ratatui = "0.30"
+crossterm = "0.29"
+
+# --- misc ---
+rand = "0.10"
+tempfile = "3.27"
+
+# --- test-only ---
+assert_cmd = "2.2"
+predicates = "3.1"
+insta = { version = "1.48", features = ["json", "yaml"] }
+proptest = "1.11"
+testcontainers = "0.28"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_qualifications = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Practical allowances on top of pedantic.
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+# Restriction lints we opt into (tests are exempt via clippy.toml).
+dbg_macro = "warn"
+unwrap_used = "warn"
+unimplemented = "warn"
