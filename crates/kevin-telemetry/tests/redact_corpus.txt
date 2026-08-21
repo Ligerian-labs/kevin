@@ -1,0 +1,64 @@
+# Redaction golden corpus (plan/09 §Redaction). Format: `in: <text>` followed by
+# `out: <expected>`; blank lines and `#` comments are ignored. Every new secret
+# kind adds a pair here.
+
+in: ANTHROPIC_API_KEY=sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789
+out: ANTHROPIC_API_KEY=[REDACTED:anthropic_key]
+
+in: using key sk-ant-sid01-0123456789abcdef for session
+out: using key [REDACTED:anthropic_key] for session
+
+in: OPENAI_API_KEY=sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz
+out: OPENAI_API_KEY=[REDACTED:openai_key]
+
+in: export OPENAI_API_KEY="sk-1234567890abcdefghijklmnop"
+out: export OPENAI_API_KEY="[REDACTED:openai_key]"
+
+in: token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 pushed
+out: token [REDACTED:github_token] pushed
+
+in: github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz
+out: [REDACTED:github_token]
+
+in: AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+out: AWS_ACCESS_KEY_ID=[REDACTED:aws_key]
+
+in: slack xoxb-NOTREAL-NOTREAL-NOTREALTOKEN
+out: slack [REDACTED:slack_token]
+
+in: Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcDEFghiJKLmno
+out: Authorization: Bearer [REDACTED:jwt]
+
+in: Authorization: Bearer d2hhdGV2ZXItdG9rZW4tdmFsdWU=
+out: Authorization: Bearer [REDACTED:bearer]
+
+in: -----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----
+out: [REDACTED:private_key]
+
+in: postgres://kevin:kevin-secret@localhost:5433/kevin
+out: postgres://kevin:[REDACTED:postgres_password]@localhost:5433/kevin
+
+in: postgresql://user:p%40ss@db.internal/app
+out: postgresql://user:[REDACTED:postgres_password]@db.internal/app
+
+in: MY_SERVICE_TOKEN=abcd1234efgh
+out: MY_SERVICE_TOKEN=[REDACTED:env_secret]
+
+in: DB_PASSWORD: hunter2hunter2
+out: DB_PASSWORD: [REDACTED:env_secret]
+
+# Things that must NOT be redacted.
+in: task sk-8 failed
+out: task sk-8 failed
+
+in: the bearer of bad news
+out: the bearer of bad news
+
+in: KEY_COUNT=3
+out: KEY_COUNT=3
+
+in: postgres://localhost/kevin
+out: postgres://localhost/kevin
+
+in: plain message with run_id 01910000-0000-7000-8000-0000000000aa
+out: plain message with run_id 01910000-0000-7000-8000-0000000000aa

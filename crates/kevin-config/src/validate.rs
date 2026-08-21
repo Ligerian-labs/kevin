@@ -281,15 +281,14 @@ fn memory(config: &KevinConfig, sources: &Sources, errors: &mut ConfigErrors) {
     if let Some((_, expected)) = KNOWN_EMBEDDING_DIMENSIONS
         .iter()
         .find(|(model, _)| *model == m.embedding_model)
+        && *expected != m.dimensions
     {
-        if *expected != m.dimensions {
-            errors.push(ConfigError::EmbeddingDimensionMismatch {
-                layer: source_of(sources, "memory.dimensions"),
-                model: m.embedding_model.clone(),
-                expected: *expected,
-                actual: m.dimensions,
-            });
-        }
+        errors.push(ConfigError::EmbeddingDimensionMismatch {
+            layer: source_of(sources, "memory.dimensions"),
+            model: m.embedding_model.clone(),
+            expected: *expected,
+            actual: m.dimensions,
+        });
     }
 }
 

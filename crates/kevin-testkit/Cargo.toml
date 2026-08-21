@@ -13,5 +13,8 @@ workspace = true
 
 [dependencies]
 kevin-domain.workspace = true
+kevin-bus.workspace = true
+async-trait.workspace = true
 chrono.workspace = true
+serde_json.workspace = true
 uuid.workspace = true

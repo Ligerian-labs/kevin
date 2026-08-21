@@ -567,7 +567,7 @@ fn ac_ws02_3_bad_duration_is_reported_with_key_path() {
         "garbage duration",
     );
     let r = load(LoadOptions::hermetic().set("budget.default_run_wall=1h 30m")).unwrap();
-    assert_eq!(r.config.budget.default_run_wall, Duration::from_secs(5400));
+    assert_eq!(r.config.budget.default_run_wall, Duration::from_mins(90));
 }
 
 #[test]

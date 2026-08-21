@@ -42,22 +42,21 @@ pub fn load(opts: LoadOptions) -> Result<Resolved, ConfigErrors> {
     let mut state = Layered::defaults();
 
     // 2. user file (missing → skipped)
-    if let Some(path) = &user_file {
-        if path.is_file() {
-            if let Some(table) = read_table(path, &Source::UserFile(path.clone()), &mut errors) {
-                state.apply(&table, &Source::UserFile(path.clone()), &mut errors);
-            }
-        }
+    if let Some(path) = &user_file
+        && path.is_file()
+        && let Some(table) = read_table(path, &Source::UserFile(path.clone()), &mut errors)
+    {
+        state.apply(&table, &Source::UserFile(path.clone()), &mut errors);
     }
 
     // 3. project file (walk up to the repo root; protected sections rejected)
-    if let Some(dir) = &project_dir {
-        if let Some(path) = find_project_file(dir) {
-            let source = Source::ProjectFile(path.clone());
-            if let Some(mut table) = read_table(&path, &source, &mut errors) {
-                strip_protected(&mut table, &source, &mut errors);
-                state.apply(&table, &source, &mut errors);
-            }
+    if let Some(dir) = &project_dir
+        && let Some(path) = find_project_file(dir)
+    {
+        let source = Source::ProjectFile(path.clone());
+        if let Some(mut table) = read_table(&path, &source, &mut errors) {
+            strip_protected(&mut table, &source, &mut errors);
+            state.apply(&table, &source, &mut errors);
         }
     }
 

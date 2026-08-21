@@ -1,6 +1,6 @@
 [package]
 name = "kevin-telemetry"
-description = "Telemetry platform crate."
+description = "Telemetry platform crate: tracing subscriber, JSON logs, redaction, metrics registry and exporter."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,35 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+# Optional OTLP trace export (`telemetry.otlp_endpoint`), see plan/10.
+otlp = [
+  "dep:tracing-opentelemetry",
+  "dep:opentelemetry",
+  "dep:opentelemetry_sdk",
+  "dep:opentelemetry-otlp",
+]
+
 [dependencies]
 kevin-domain.workspace = true
 kevin-config.workspace = true
 
+chrono.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "rt"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+tracing-opentelemetry = { workspace = true, optional = true }
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
