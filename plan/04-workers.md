@@ -196,18 +196,47 @@ already part of `output_tokens`. No cost anywhere → router price table.
 pi -p --mode json
   --provider <model.provider>                   # required for pi aliases (validate_alias)
   --model <model.model>
-  [--thinking <off|minimal|low|medium|high|xhigh|max>]   # Effort mapping 1:1 (XHigh→xhigh)
-  --append-system-prompt <context>
-  --no-session                                  # default extra_args; drop when a follow-up needs --session-id
-  [--session-id <attempt uuid>]                 # when follow-ups are expected
-  <extra_args…>
-  <message>                                     # prompt as final arg
+  [--thinking <low|medium|high|xhigh|max>]      # Effort mapping 1:1 (pi also has off|minimal)
+  --append-system-prompt <context>              # + the JSON-schema instruction, see Structured output
+  [--tools read,grep,find,ls]                   # read-only, in-place attempts (09-security)
+  [--session-id <attempt uuid>]                 # fresh attempt when sessions are kept
+  [--session <session id>]                      # follow-up / repair turn; drops --no-session
+  <extra_args…>                                 # default: --no-session (ephemeral)
+  <message>                                     # prompt as final arg (pi has no stdin prompt)
 ```
 
-Event mapping for `--mode json` `[inferred — verify]`: message-start/delta
-lines → `AssistantText`; tool call start/end → `ToolCall`/`ToolResult`; usage
-block → `Usage`; final assistant message → `Final`. Structured output: prompt
-instruction + extraction (see below).
+Verified against `pi` 0.84.2. `--session-id` only *creates/names* a project
+session; resuming one is `--session <path|id>`, so a follow-up uses `--session`
+and drops the contradicting `--no-session`. An argv entry starting with `@` is
+read as a file attachment and one starting with `-` is rejected, so a prompt
+beginning with either is prefixed with a newline.
+
+Event mapping for `--mode json` (documented by the CLI's own `docs/json.md` as
+`JsonAgentSessionEvent`, pinned by fixtures): the `{"type":"session","id"}`
+stream header → `Started{session_id}`; `message_update` whose
+`assistantMessageEvent.type` is `text_delta` → `AssistantText` and
+`thinking_delta` → `Thinking` (`toolcall_*` deltas are argument fragments and
+are transcript-only); `tool_execution_start{toolName,args}` → `ToolCall`;
+`tool_execution_end{toolName,result,isError}` → `ToolResult{ok = !isError}`;
+`message_end` of an assistant message → `Usage{delta}`. `agent_start`,
+`turn_*`, `auto_retry_*`, `queue_update` and `agent_end` are transcript-only.
+
+`pi` has **no terminal line**: `agent_end` repeats once per internal auto-retry,
+so the verdict comes from the *last* assistant `message_end`: `stopReason`
+`stop` → `Final` (text = its `text` content blocks), `error` → `Failed`
+(`Transient` when `errorMessage` matches the rate-limit/network signature, else
+`Permanent`), `aborted` → `Failed{Cancelled}`, `length` → `Failed{Permanent}`,
+`toolUse`/`pending` at end of stream → no final message. Print mode always
+exits 0 — even on provider errors, which only `--mode text` turns into exit 1 —
+so the exit status alone never classifies a `pi` attempt.
+
+Usage: `message_end.message.usage` is the total of *that one message*
+(`{input, output, cacheRead, cacheWrite, reasoning?, totalTokens, cost{…, total}}`,
+camelCase), so the per-message totals add up. `pi` computes cost itself:
+`usage.cost.total` fills `Usage.cost_usd` and the router price table is not
+consulted. Structured output: prompt instruction + extraction (see below); the
+repair turn resumes with `--session` when sessions are kept, otherwise it
+restates the previous answer in a fresh, ephemeral turn.
 
 ## Adapter: `opencode`
 
@@ -306,7 +335,7 @@ Kohral conformance suite need no model.
 |---|---|---|---|---|
 | claude | `message.usage`, `result.usage` | `total_cost_usd` from result | `--session-id` / `--resume` | none (alias) |
 | codex | `turn.completed.usage` | price table | `codex exec resume <thread_id>` | `-c model_reasoning_effort` (1:1, `max` included) |
-| pi | usage block `[inferred — verify]` | price table | `--session-id` | `--thinking` |
+| pi | `message_end.message.usage` (per message, camelCase) | `usage.cost.total` from the same block | `--session-id` then `--session <id>` | `--thinking` (1:1) |
 | opencode | `step-finish.tokens` per step (reasoning added to output) | `step-finish.cost` per step | `-s <id>` | `--variant` |
 | fake | scripted | 0 | n/a | ignored |
 
@@ -336,8 +365,10 @@ impl WorkerRegistry {
 exits 1 if any *enabled* worker is missing or a role alias is unusable.
 Auth readiness: claude → `claude auth status` or `~/.claude` credentials present
 `[inferred — verify]`; codex → `$CODEX_HOME/auth.json` or `OPENAI_API_KEY`; pi →
-`pi auth check`; opencode → a provider API key, `~/.local/share/opencode/auth.json`,
-or the credential count of `opencode providers list` (verified, 1.18.15).
+`pi auth check --provider <p> --json --no-refresh` per configured alias provider
+(offline, spends nothing); opencode → a provider API key,
+`~/.local/share/opencode/auth.json`, or the credential count of
+`opencode providers list` (verified, 1.18.15).
 
 ## Testing
 

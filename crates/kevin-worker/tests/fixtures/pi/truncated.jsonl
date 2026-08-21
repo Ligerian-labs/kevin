@@ -1,0 +1,12 @@
+{"type":"session","version":3,"id":"55555555-6666-7777-8888-999999999999","timestamp":"2026-08-21T22:13:00.000Z","cwd":"/workspace"}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"Write the migration."}],"timestamp":1787350400000}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"Write the migration."}],"timestamp":1787350400000}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"reasoning":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.0}},"stopReason":"pending","timestamp":1787350400100}}
+{"type":"message_update","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"reasoning":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.0}},"assistantMessageEvent":{"type":"text_start","contentIndex":0}}
+{"type":"message_update","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"reasoning":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.0}},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"-- 0002_add_index.sql\nCREATE INDEX"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"-- 0002_add_index.sql\nCREATE INDEX"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5","usage":{"input":980,"output":64000,"cacheRead":0,"cacheWrite":0,"reasoning":0,"totalTokens":64980,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.96294}},"stopReason":"length","rawStopReason":"max_tokens","timestamp":1787350402000}}
+{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"-- 0002_add_index.sql\nCREATE INDEX"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5","usage":{"input":980,"output":64000,"cacheRead":0,"cacheWrite":0,"reasoning":0,"totalTokens":64980,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.96294}},"stopReason":"length","timestamp":1787350402000},"toolResults":[]}
+{"type":"agent_end","messages":[],"willRetry":false}
+{"type":"agent_settled"}
