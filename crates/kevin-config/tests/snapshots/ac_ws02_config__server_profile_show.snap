@@ -1,0 +1,353 @@
+---
+source: crates/kevin-config/tests/ac_ws02_config.rs
+expression: server.redacted_toml()
+---
+[kevin]
+data_dir = "~/.local/share/kevin"
+instance_name = "kevin"
+profile = "server"
+auto_approve_plans = false
+shutdown_grace_period = "30s"
+
+[database]
+url = "postgres://kevin:***@localhost:5432/kevin"
+pool_size = 10
+auto_migrate = false
+statement_timeout = "30s"
+
+[server]
+enabled = true
+bind = "127.0.0.1:7777"
+auth_token_file = "***"
+cors_origins = []
+request_timeout = "30s"
+sse_keepalive = "15s"
+docs = false
+token_grace = "5m"
+
+[client]
+server_url = ""
+token_file = "***"
+
+[budget]
+default_run_usd = 10.0
+default_task_usd = 3.0
+default_run_wall = "2h"
+default_task_wall = "30m"
+max_attempts = 2
+max_parallel_tasks = 4
+max_tokens_per_task = 2000000
+
+[orchestrator]
+question_confidence_threshold = 0.7
+max_questions_per_run = 4
+max_tasks_per_run = 24
+role_call_timeout = "15m"
+question_default_timeout = "10m"
+plan_revision_limit = 2
+evaluation_timeout = "10m"
+progress_interval = "10s"
+
+[concurrency]
+worker_threads = 0
+blocking_threads = 2
+
+[concurrency.per_worker_kind]
+claude = 4
+codex = 4
+pi = 4
+opencode = 4
+fake = 64
+
+[retention]
+task_log_days = 30
+transcript_days = 30
+artifact_days = 90
+
+[workers]
+kill_grace = "10s"
+
+[workers.claude]
+enabled = true
+bin = "claude"
+permission_mode = "acceptEdits"
+allowed_tools = [
+    "Read",
+    "Edit",
+    "Write",
+    "Bash(git *)",
+    "Bash(cargo *)",
+    "Bash(npm *)",
+    "Bash(pnpm *)",
+    "Bash(bun *)",
+    "Grep",
+    "Glob",
+]
+extra_args = []
+env_passthrough = [
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "HOME",
+    "PATH",
+    "SSL_CERT_FILE",
+]
+max_turns = 200
+structured_output = "json_schema"
+
+[workers.codex]
+enabled = true
+bin = "codex"
+sandbox = "workspace-write"
+extra_args = ["--skip-git-repo-check"]
+env_passthrough = [
+    "OPENAI_API_KEY",
+    "CODEX_HOME",
+    "HOME",
+    "PATH",
+]
+
+[workers.pi]
+enabled = true
+bin = "pi"
+extra_args = ["--no-session"]
+env_passthrough = [
+    "HOME",
+    "PATH",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+]
+
+[workers.opencode]
+enabled = true
+bin = "opencode"
+agent = ""
+extra_args = []
+env_passthrough = [
+    "HOME",
+    "PATH",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+]
+
+[workers.fake]
+enabled = false
+script = ""
+
+[models.fable5-claude]
+worker = "claude"
+model = "claude-fable-5"
+tier = "frontier"
+context_tokens = 1000000
+input_usd_per_m = 10.0
+output_usd_per_m = 50.0
+tags = [
+    "reasoning",
+    "planning",
+    "judge",
+    "hard",
+]
+
+[models.fake]
+worker = "fake"
+model = "fake"
+tier = "fast"
+input_usd_per_m = 0.0
+output_usd_per_m = 0.0
+
+[models.gpt56-codex]
+worker = "codex"
+model = "gpt-5.6"
+tier = "frontier"
+tags = [
+    "coding",
+    "implement",
+    "review",
+]
+
+[models.haiku45-claude]
+worker = "claude"
+model = "claude-haiku-4-5"
+tier = "fast"
+context_tokens = 200000
+input_usd_per_m = 1.0
+output_usd_per_m = 5.0
+tags = [
+    "summarise",
+    "classify",
+    "cheap",
+]
+
+[models.opus5-claude]
+worker = "claude"
+model = "claude-opus-5"
+tier = "frontier"
+context_tokens = 1000000
+input_usd_per_m = 5.0
+output_usd_per_m = 25.0
+tags = [
+    "reasoning",
+    "coding",
+    "planning",
+    "judge",
+]
+
+[models.sonnet5-claude]
+worker = "claude"
+model = "claude-sonnet-5"
+tier = "balanced"
+context_tokens = 1000000
+input_usd_per_m = 3.0
+output_usd_per_m = 15.0
+tags = [
+    "coding",
+    "implement",
+    "test",
+    "review",
+]
+
+[models.sonnet5-opencode]
+worker = "opencode"
+model = "anthropic/claude-sonnet-5"
+tier = "balanced"
+input_usd_per_m = 3.0
+output_usd_per_m = 15.0
+tags = ["coding"]
+
+[models.sonnet5-pi]
+worker = "pi"
+model = "claude-sonnet-5"
+tier = "balanced"
+input_usd_per_m = 3.0
+output_usd_per_m = 15.0
+tags = ["coding"]
+provider = "anthropic"
+
+[roles]
+planner = "opus5-claude"
+clarifier = "opus5-claude"
+judge = "opus5-claude"
+integrator = "sonnet5-claude"
+default = "sonnet5-claude"
+
+[roles.effort]
+planner = "xhigh"
+judge = "high"
+integrator = "medium"
+
+[routing]
+policy = "thompson"
+exploration = 0.1
+min_samples_before_exploit = 3
+quality_weight = 0.7
+cost_weight = 0.2
+latency_weight = 0.1
+
+[routing.prefer_tier_for_complexity]
+low = "fast"
+medium = "balanced"
+high = "frontier"
+
+[routing.kinds.research]
+candidates = [
+    "opus5-claude",
+    "sonnet5-claude",
+]
+
+[routing.kinds.implement]
+candidates = [
+    "sonnet5-claude",
+    "gpt56-codex",
+    "opus5-claude",
+]
+
+[routing.kinds.test]
+candidates = [
+    "sonnet5-claude",
+    "gpt56-codex",
+]
+
+[routing.kinds.review]
+candidates = [
+    "opus5-claude",
+    "gpt56-codex",
+]
+
+[routing.kinds.refactor]
+candidates = [
+    "sonnet5-claude",
+    "gpt56-codex",
+]
+
+[routing.kinds.debug]
+candidates = [
+    "opus5-claude",
+    "gpt56-codex",
+    "sonnet5-claude",
+]
+
+[routing.kinds.write]
+candidates = [
+    "sonnet5-claude",
+    "haiku45-claude",
+]
+
+[routing.kinds.ops]
+candidates = ["sonnet5-claude"]
+
+[memory]
+enabled = true
+embedder = "fastembed"
+embedding_model = "BAAI/bge-small-en-v1.5"
+dimensions = 384
+top_k = 8
+min_similarity = 0.35
+context_max_tokens = 2500
+store_run_summaries = true
+store_artifact_summaries = true
+decay_half_life_days = 90
+
+[evaluation]
+enabled = true
+evaluate_tasks = true
+rubric = "default"
+auto_apply = [
+    "routing",
+    "memory",
+]
+proposals_require_approval = true
+
+[workspace]
+strategy = "auto"
+root = ".kevin/workspaces"
+branch_prefix = "kevin/"
+cleanup = "on_success"
+integration = "pr"
+pr_per_task = false
+
+[checks]
+commands = []
+
+[sandbox]
+tier = "cli-native"
+allow_dangerous_flags = false
+network = "inherit"
+env_allowlist_extra = []
+
+[telemetry]
+log_format = "json"
+log_level = "info"
+metrics_bind = ""
+otlp_endpoint = ""
+
+[kohral]
+enabled = false
+bind = "0.0.0.0:8080"
+token_file = "***"
+identity_file = "***"
+collaboration_url = ""
+soul_file = "/opt/kevin/config/SOUL.md"
+documentation_file = "/opt/kevin/config/KOHRAL_DOCUMENTATION.md"
+memory_file = "/opt/kevin/data/MEMORY.md"
+run_timeout = "30m"
+max_attachment_bytes = 26214400

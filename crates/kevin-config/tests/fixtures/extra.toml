@@ -1,0 +1,6 @@
+# --config layer fixture.
+[kevin]
+instance_name = "file"
+
+[telemetry]
+log_level = "debug"

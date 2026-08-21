@@ -1,0 +1,9 @@
+# Project layer fixture (./.kevin/kevin.toml): only unprotected sections.
+[kevin]
+instance_name = "project"
+
+[checks]
+commands = ["just ci"]
+
+[routing.kinds.implement]
+candidates = ["sonnet5-claude"]

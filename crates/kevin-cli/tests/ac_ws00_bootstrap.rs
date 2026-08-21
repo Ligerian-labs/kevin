@@ -116,7 +116,6 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
             "no",
         ],
         &["db", "migrate"],
-        &["config", "show"],
         &["workers", "doctor"],
         &["routes"],
         &["routes", "explain", "--kind", "implement"],
