@@ -38,7 +38,7 @@ async fn ac_ws03_5_db_commands_and_idempotent_migrations() {
         .stdout(
             predicate::str::contains("database created").or(predicate::str::contains("created")),
         )
-        .stdout(predicate::str::contains("migrations: applied [1]"));
+        .stdout(predicate::str::contains("migrations: applied [1"));
 
     // status: current, pgvector installed, exit 0.
     kevin()
@@ -95,14 +95,14 @@ async fn ac_ws03_5_db_commands_and_idempotent_migrations() {
         .args(["db", "--url", &fresh_url, "reset", "--yes"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("applied [1]"));
+        .stdout(predicate::str::contains("applied [1"));
     kevin()
         .args(["db", "--url", &fresh_url, "status"])
         .assert()
         .success()
         .stdout(predicate::str::contains("status: current"));
 
-    // prune runs; rebuild-projection is an explicit stub until WS-11.
+    // prune and rebuild-projection run (WS-11 wired the latter to the runner).
     kevin()
         .args(["db", "--url", &fresh_url, "prune"])
         .assert()
@@ -111,8 +111,8 @@ async fn ac_ws03_5_db_commands_and_idempotent_migrations() {
     kevin()
         .args(["db", "--url", &fresh_url, "rebuild-projection", "--all"])
         .assert()
-        .code(2)
-        .stderr(predicate::str::contains("WS-11"));
+        .success()
+        .stdout(predicate::str::contains("rebuilt run_overview"));
 
     // `--set database.url=` and a TestDb work too (no --url).
     let db = TestDb::new().await;

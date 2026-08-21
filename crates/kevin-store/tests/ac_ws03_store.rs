@@ -455,8 +455,11 @@ async fn ac_ws03_5_migrations_idempotent() {
         .append(&run_stream(), 0, &[event("run.started", json!({}))])
         .await
         .unwrap();
+    // Every embedded migration is re-applied (WS-11 added `0002_orch`, and
+    // later workstreams add more), so compare against the embedded set.
+    let embedded: Vec<i64> = kevin_store::MIGRATOR.iter().map(|m| m.version).collect();
     let report = migrate::reset(pool).await.unwrap();
-    assert_eq!(report.applied, vec![1]);
+    assert_eq!(report.applied, embedded);
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM core.events")
         .fetch_one(pool)
         .await
@@ -476,11 +479,11 @@ async fn ac_ws03_5_migrations_idempotent() {
         .unwrap();
     tx.commit().await.unwrap();
     match migrate::migrate(pool, MigratePolicy::CheckOnly).await {
-        Err(StoreError::MigrationsPending { pending }) => assert_eq!(pending, vec![1]),
+        Err(StoreError::MigrationsPending { pending }) => assert_eq!(pending, embedded),
         other => panic!("expected MigrationsPending, got {other:?}"),
     }
     let report = migrate::migrate(pool, MigratePolicy::Apply).await.unwrap();
-    assert_eq!(report.applied, vec![1]);
+    assert_eq!(report.applied, embedded);
     db.close().await;
 }
 

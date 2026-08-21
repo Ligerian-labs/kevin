@@ -7,14 +7,18 @@
 //! profile guarding `reset` is `kevin.profile` from the same configuration.
 
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::Duration;
 
 use clap::Args as _;
 use kevin_config::Profile;
+use kevin_orchestrator::projections::{
+    self, ProjectionError, RebuildReport,
+};
 use kevin_store::admin::{InitOptions, init};
 use kevin_store::db::redact_url;
 use kevin_store::migrate::{self, MigratePolicy, MigrationState};
-use kevin_store::{DatabaseCfg, Db, Outbox, StoreError};
+use kevin_store::{DatabaseCfg, Db, EventStore, Outbox, PgEventStore, StoreError};
 
 use crate::cmd::config::load_from_ctx;
 use crate::{Ctx, ExitError, exit};
@@ -57,16 +61,19 @@ pub enum Cmd {
         #[arg(long)]
         yes: bool,
     },
-    /// Prune old data (delivered outbox rows now; task logs once WS-11 lands).
+    /// Prune old data (delivered outbox rows and task log lines).
     Prune {
         /// Delete delivered outbox rows older than this many days.
         #[arg(long, default_value_t = 7, value_name = "DAYS")]
         outbox_days: u32,
+        /// Delete `orch.task_log` lines older than this many days.
+        #[arg(long, default_value_t = 30, value_name = "DAYS")]
+        task_log_days: u32,
     },
     /// Rebuild a projection from the event store.
     #[command(name = "rebuild-projection")]
     RebuildProjection {
-        /// Projection name.
+        /// Projection name (one of `orch`'s read models).
         #[arg(value_name = "NAME", required_unless_present = "all", conflicts_with = "all")]
         name: Option<String>,
         /// Rebuild every projection.
@@ -93,14 +100,71 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
         Cmd::Migrate => run_migrate(&url, ctx).await,
         Cmd::Status => run_status(&url, ctx).await,
         Cmd::Reset { yes } => run_reset(&url, yes, profile, ctx).await,
-        Cmd::Prune { outbox_days } => run_prune(&url, outbox_days, ctx).await,
-        Cmd::RebuildProjection { .. } => Err(ExitError::new(
-            exit::NOT_IMPLEMENTED,
-            "`kevin db rebuild-projection` lands with the projections workstream (WS-11); \
-             nothing was changed",
-        )
-        .into()),
+        Cmd::Prune {
+            outbox_days,
+            task_log_days,
+        } => run_prune(&url, outbox_days, task_log_days, ctx).await,
+        Cmd::RebuildProjection { name, all } => {
+            run_rebuild_projection(&url, name.as_deref(), all, ctx).await
+        }
     }
+}
+
+/// `kevin db rebuild-projection <name|--all>`: truncate the read model and
+/// replay `core.events` from position 0 (`plan/10-observability-ops.md`
+/// §Runbooks). Readers see stale rows until it finishes.
+async fn run_rebuild_projection(
+    url: &str,
+    name: Option<&str>,
+    all: bool,
+    ctx: &Ctx,
+) -> anyhow::Result<ExitCode> {
+    let pool = Db::connect_url(url).await.map_err(|e| store_err(&e))?;
+    let store: Arc<dyn EventStore> = Arc::new(PgEventStore::new(pool.clone()));
+    let result = if all {
+        projections::rebuild_all(pool.clone(), store).await
+    } else {
+        let name = name.unwrap_or_default();
+        projections::rebuild(pool.clone(), store, name)
+            .await
+            .map(|report| vec![report])
+    };
+    pool.close().await;
+    let reports = result.map_err(|e| projection_err(&e))?;
+    if ctx.global.json {
+        let rows: Vec<serde_json::Value> = reports
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "projection": r.name,
+                    "events": r.events,
+                    "position": r.position,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::json!({ "rebuilt": rows }));
+    } else if !ctx.global.quiet {
+        for report in &reports {
+            println!("{}", rebuild_summary(report));
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn rebuild_summary(report: &RebuildReport) -> String {
+    format!(
+        "rebuilt {}: replayed {} events, checkpoint at position {}",
+        report.name, report.events, report.position
+    )
+}
+
+fn projection_err(err: &ProjectionError) -> anyhow::Error {
+    let code = if matches!(err, ProjectionError::UnknownProjection { .. }) {
+        exit::INVALID_ARGS
+    } else {
+        exit::FAILED
+    };
+    ExitError::new(code, err.to_string()).into()
 }
 
 async fn run_init(
@@ -270,23 +334,30 @@ async fn run_reset(url: &str, yes: bool, profile: Profile, ctx: &Ctx) -> anyhow:
     Ok(ExitCode::SUCCESS)
 }
 
-async fn run_prune(url: &str, outbox_days: u32, ctx: &Ctx) -> anyhow::Result<ExitCode> {
+async fn run_prune(
+    url: &str,
+    outbox_days: u32,
+    task_log_days: u32,
+    ctx: &Ctx,
+) -> anyhow::Result<ExitCode> {
     let pool = Db::connect_url(url).await.map_err(|e| store_err(&e))?;
     let outbox = Outbox::new(pool.clone());
     let result = outbox
         .prune_delivered(Duration::from_secs(u64::from(outbox_days) * 86_400))
         .await;
+    let logs = projections::TaskLog::new(pool.clone())
+        .prune_older_than_days(task_log_days)
+        .await;
     pool.close().await;
     let pruned = result.map_err(|e| store_err(&e))?;
+    let log_lines = logs.map_err(|e| projection_err(&e))?;
     if !ctx.global.quiet {
         println!("pruned {pruned} delivered outbox rows older than {outbox_days} days");
-        println!(
-            "note: task_log retention (`retention.task_log_days`) is pruned here once the \
-             projections workstream (WS-11) lands"
-        );
+        println!("pruned {log_lines} task log lines older than {task_log_days} days");
     }
     Ok(ExitCode::SUCCESS)
 }
+
 
 fn created(done: bool, attempted: bool) -> &'static str {
     match (done, attempted) {

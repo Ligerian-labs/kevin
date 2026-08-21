@@ -1501,6 +1501,8 @@ dependencies = [
 name = "kevin-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "insta",
  "jsonschema",
  "kevin-bus",
@@ -1514,12 +1516,15 @@ dependencies = [
  "kevin-testkit",
  "kevin-worker",
  "kevin-workspace",
+ "metrics",
  "serde",
  "serde_json",
+ "sqlx",
  "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -23,16 +23,20 @@ kevin-router.workspace = true
 kevin-memory.workspace = true
 kevin-evaluator.workspace = true
 
-serde = { workspace = true }
+async-trait.workspace = true
+chrono.workspace = true
+metrics.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
-tracing.workspace = true
-tokio = { workspace = true }
+tokio.workspace = true
 tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
-kevin-testkit.workspace = true
+kevin-testkit = { workspace = true, features = ["pg"] }
 insta.workspace = true
 jsonschema.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-
