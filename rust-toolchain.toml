@@ -1,0 +1,4 @@
+# Stable toolchain; MSRV (`rust-version` in Cargo.toml) is checked separately in CI.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

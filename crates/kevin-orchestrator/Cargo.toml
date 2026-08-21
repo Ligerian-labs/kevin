@@ -1,0 +1,25 @@
+[package]
+name = "kevin-orchestrator"
+description = "Orchestration core context."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kevin-domain.workspace = true
+kevin-config.workspace = true
+kevin-telemetry.workspace = true
+kevin-store.workspace = true
+kevin-bus.workspace = true
+kevin-workspace.workspace = true
+kevin-worker.workspace = true
+kevin-router.workspace = true
+kevin-memory.workspace = true
+kevin-evaluator.workspace = true
+

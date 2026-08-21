@@ -1,0 +1,31 @@
+# Postgres 16 + pgvector for local development and tests.
+#
+#   just db-up        # podman compose (or docker compose) up -d --wait
+#   just db-down
+#
+# The host port defaults to 5433 so it matches the default DATABASE_URL
+# (postgres://kevin:kevin@localhost:5433/kevin) and does not collide with a
+# system Postgres on 5432. Override with KEVIN_PG_PORT=5432; the container name
+# defaults to kevin-pg (KEVIN_PG_CONTAINER). If a kevin-pg container already
+# serves 5433 (e.g. the shared dev box), there is nothing to start.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ${KEVIN_PG_CONTAINER:-kevin-pg}
+    environment:
+      POSTGRES_USER: kevin
+      POSTGRES_PASSWORD: kevin
+      POSTGRES_DB: kevin
+    ports:
+      - "${KEVIN_PG_PORT:-5433}:5432"
+    volumes:
+      - kevin-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kevin -d kevin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  kevin-pg-data:
