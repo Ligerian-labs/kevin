@@ -1242,6 +1242,7 @@ dependencies = [
  "kevin-router",
  "kevin-store",
  "kevin-telemetry",
+ "kevin-testkit",
  "kevin-tui",
  "kevin-worker",
  "kevin-workspace",
@@ -1251,6 +1252,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml",
+ "uuid",
 ]
 
 [[package]]
@@ -1343,9 +1345,22 @@ dependencies = [
 name = "kevin-store"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
  "kevin-config",
  "kevin-domain",
  "kevin-telemetry",
+ "kevin-testkit",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1378,7 +1393,10 @@ dependencies = [
  "chrono",
  "kevin-bus",
  "kevin-domain",
+ "kevin-store",
  "serde_json",
+ "sqlx",
+ "tokio",
  "uuid",
 ]
 
@@ -2754,6 +2772,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",

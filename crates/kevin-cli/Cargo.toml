@@ -40,6 +40,9 @@ tokio.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
+kevin-testkit = { workspace = true, features = ["pg"] }
 predicates.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 toml.workspace = true
+uuid.workspace = true

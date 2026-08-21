@@ -11,10 +11,18 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+# Postgres harness (`pg::TestDb`): per-test databases cloned from a migrated template.
+pg = ["dep:kevin-store", "dep:sqlx", "dep:tokio"]
+
 [dependencies]
 kevin-domain.workspace = true
 kevin-bus.workspace = true
+kevin-store = { workspace = true, optional = true }
 async-trait.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
+sqlx = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }

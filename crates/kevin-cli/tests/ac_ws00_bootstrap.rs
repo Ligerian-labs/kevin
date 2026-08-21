@@ -115,7 +115,7 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
             "--feedback",
             "no",
         ],
-        &["db", "migrate"],
+        // `db` is implemented by WS-03 (see ac_ws03_db_commands.rs).
         &["workers", "doctor"],
         &["routes"],
         &["routes", "explain", "--kind", "implement"],
