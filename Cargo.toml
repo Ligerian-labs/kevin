@@ -5,7 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.94"
 license = "Apache-2.0"
 repository = "https://github.com/Ligerian-labs/kevin"
 homepage = "https://github.com/Ligerian-labs/kevin"
@@ -56,6 +56,12 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
+# Optional OTLP traces (kevin-telemetry `otlp` feature).
+tracing-opentelemetry = "0.33"
+opentelemetry = { version = "0.32", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "grpc-tonic"] }
 
 # --- config ---
 figment = { version = "0.10", features = ["toml", "env"] }

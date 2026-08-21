@@ -10,7 +10,9 @@
 //! - [`fake_worker`] — fake worker scenarios and helpers (WS-05).
 //! - [`fake_api`] — in-process fake of the HTTP API for client/TUI tests (WS-16).
 //! - [`given_when_then`] — aggregate given/when/then helpers (WS-01).
+//! - [`bus`] — `VecEventSource` (in-memory `EventSource`) and envelope builders (WS-04).
 
+pub mod bus;
 pub mod clock;
 pub mod fake_api;
 pub mod fake_worker;
