@@ -11,4 +11,5 @@
 //! `kevin-kohral`, `kevin-cli`) depend on it. Implemented by WS-08 (engine),
 //! WS-10 (roles), WS-11 (projections).
 
+pub mod projections;
 pub mod roles;
