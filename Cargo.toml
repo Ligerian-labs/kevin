@@ -83,6 +83,7 @@ crossterm = "0.29"
 # --- misc ---
 rand = "0.10"
 tempfile = "3.27"
+sha2 = "0.10"
 
 # --- test-only ---
 assert_cmd = "2.2"
