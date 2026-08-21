@@ -15,8 +15,10 @@ use clap::{Args as _, FromArgMatches as _};
 
 pub mod cmd;
 pub mod ctx;
+pub mod version;
 
 pub use ctx::{Ctx, ExitError, GlobalArgs, exit, not_implemented};
+pub use version::{BUILD_DATE, GIT_SHA, LONG_VERSION, VERSION};
 
 /// Binary name.
 pub const BIN_NAME: &str = "kevin";
@@ -25,7 +27,7 @@ pub const BIN_NAME: &str = "kevin";
 #[must_use]
 pub fn command() -> clap::Command {
     GlobalArgs::augment_args(clap::Command::new(BIN_NAME))
-        .version(env!("CARGO_PKG_VERSION"))
+        .version(LONG_VERSION)
         .about("Kevin — autonomous agent runtime that orchestrates your coding agents")
         .long_about(
             "Kevin understands a goal, asks what is ambiguous, plans a task graph, routes each \

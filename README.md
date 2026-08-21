@@ -105,6 +105,55 @@ engineering specification. Useful entry points include:
 - [parallel workstreams](plan/12-workstreams.md);
 - [milestones and post-v1 roadmap](plan/13-roadmap.md).
 
+## Installation
+
+Kevin ships as a single `kevin` binary. It needs a Postgres 16 database with the
+`pgvector` extension, and it invokes the coding-agent CLIs you already have
+installed—it never bundles or authenticates them for you.
+
+**From source.** The supported source install; requires the Rust toolchain in
+`rust-toolchain.toml`.
+
+```bash
+cargo install --path crates/kevin-cli --locked
+# without a checkout:
+cargo install --git https://github.com/Ligerian-labs/kevin --locked kevin-cli
+```
+
+The crates are not published to crates.io, so `cargo install kevin-cli` does not
+work. The reasoning is in [the release runbook](docs/releasing.md).
+
+**Prebuilt binaries.** Every `vX.Y.Z` tag publishes stripped archives for
+`x86_64`/`aarch64` Linux and Intel/Apple Silicon macOS, together with a
+`SHA256SUMS` file.
+
+```bash
+tag=v0.1.0; target=aarch64-apple-darwin
+base="https://github.com/Ligerian-labs/kevin/releases/download/$tag"
+curl -fsSLO "$base/kevin-$target.tar.gz" && curl -fsSLO "$base/SHA256SUMS"
+shasum -a 256 --ignore-missing -c SHA256SUMS   # sha256sum on Linux
+tar xzf "kevin-$target.tar.gz" && install "kevin-$target/kevin" ~/.local/bin/
+```
+
+macOS binaries are not notarized; clear the quarantine attribute with
+`xattr -d com.apple.quarantine kevin` after downloading.
+
+**Container.** `ghcr.io/ligerian-labs/kevin` is the daemon image—multi-arch,
+signed with cosign, published with an SBOM and provenance attestation. It runs
+`kevin serve` and deliberately does not contain the agent CLIs.
+
+```bash
+podman run --rm -p 7777:7777 \
+  -e KEVIN__DATABASE__URL="postgres://kevin:kevin@localhost:5433/kevin" \
+  -v kevin-data:/var/lib/kevin \
+  ghcr.io/ligerian-labs/kevin:latest
+```
+
+`kevin --version` prints the semver, the commit it was built from, and the build
+date, so an installed binary always identifies itself. See
+[deployment notes](deploy/README.md) for laptop, VPS, and container topologies,
+and [the release runbook](docs/releasing.md) for signature verification.
+
 ## Development
 
 The workspace targets Rust 1.94 and uses `just` for developer commands. The
