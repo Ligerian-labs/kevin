@@ -1,0 +1,3 @@
+{"type":"thread.started","thread_id":"01a00000-0000-7000-8000-000000042942"}
+{"type":"turn.started"}
+{"type":"error","message":"stream error: unexpected status 429 Too Many Requests; retrying in 4s"}
