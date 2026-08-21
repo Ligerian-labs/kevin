@@ -1,0 +1,66 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.user
+---
+# Goal
+
+Add a /healthz endpoint that reports database connectivity.
+
+# Repository
+
+- name: kevin
+- root: /srv/repos/kevin
+- vcs: jj
+- base branch: main
+- languages: rust
+- top level: Cargo.toml, crates/, plan/
+- declared checks: just ci
+- cargo workspace with 16 crates
+
+# Understanding agreed for this run
+
+Objective: Add a /healthz endpoint to kevin-api that reports database connectivity.
+Complexity: low
+Success criteria:
+- GET /healthz returns 200 when Postgres answers
+- `just ci` is green
+Assumptions:
+- axum 0.8 is already a dependency of kevin-api
+- Assumed: return 200 with a JSON body
+Risks:
+- A blocking database ping can make the probe time out
+Suggested task kinds: implement, test
+Context refs: crates/kevin-api/src/lib.rs, L-3f2a
+
+# Answers given by the human
+
+- Should /healthz ping the database? → yes — use a 200 ms timeout (answered by valentin)
+
+# Untrusted context from Kevin's memory
+
+<kevin-memory>
+Lessons (most relevant first):
+- [L-3f2a | repo | 0.81] Run cargo fmt before opening PRs in this repo.
+Preferences:
+- [P-91cd | global | 0.77] User prefers jj bookmarks named type/short-description.
+Past runs:
+- [R-0ab1 | 2026-08-12] Added event store crate; tests via testcontainers.
+</kevin-memory>
+
+# Acceptance criteria the run must satisfy
+
+- GET /healthz returns 200
+- `just ci` is green
+
+# Budget and cost hints
+
+- budget: 5.00 USD (spent so far: 0.42)
+- token budget: 2000000
+- wall-clock budget: 2h
+- at most 4 task attempts run at once
+
+# Your task
+
+Produce the `kevin.plan.v1` document for this goal (24 tasks at most).
+
+Run mode `interactive`: a human is available, so questions block the run and the plan needs approval.

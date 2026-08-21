@@ -1,0 +1,70 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.schema
+---
+{
+  "$id": "kevin.summary.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_summaries": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "preferences": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "scope": {
+            "enum": [
+              "global",
+              "repo"
+            ],
+            "type": "string"
+          },
+          "statement": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "statement",
+          "confidence"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "maxLength": 600,
+      "type": "string"
+    }
+  },
+  "required": [
+    "summary",
+    "preferences"
+  ],
+  "title": "Kevin summariser memory records",
+  "type": "object"
+}

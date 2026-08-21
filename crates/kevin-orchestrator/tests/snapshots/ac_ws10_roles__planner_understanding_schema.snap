@@ -1,0 +1,120 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.schema
+---
+{
+  "$defs": {
+    "proposed_question": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence_if_unasked": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "multi_select": {
+          "type": "boolean"
+        },
+        "options": {
+          "items": {
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "recommended": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        },
+        "why_it_matters": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "options",
+        "why_it_matters",
+        "confidence_if_unasked"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "kevin.understanding.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "complexity": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "context_refs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "objective": {
+      "maxLength": 2000,
+      "type": "string"
+    },
+    "proposed_questions": {
+      "items": {
+        "$ref": "#/$defs/proposed_question"
+      },
+      "maxItems": 10,
+      "type": "array"
+    },
+    "risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "success_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "suggested_task_kinds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "objective",
+    "assumptions",
+    "risks",
+    "success_criteria",
+    "proposed_questions",
+    "complexity",
+    "suggested_task_kinds"
+  ],
+  "title": "Kevin planner understanding",
+  "type": "object"
+}

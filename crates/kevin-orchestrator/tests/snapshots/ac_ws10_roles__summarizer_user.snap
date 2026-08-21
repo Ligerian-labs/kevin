@@ -1,0 +1,54 @@
+---
+source: crates/kevin-orchestrator/tests/ac_ws10_roles.rs
+expression: req.user
+---
+# Goal
+
+Add a /healthz endpoint that reports database connectivity.
+
+# Repository
+
+- name: kevin
+- root: /srv/repos/kevin
+- vcs: jj
+- base branch: main
+- languages: rust
+- top level: Cargo.toml, crates/, plan/
+- declared checks: just ci
+- cargo workspace with 16 crates
+
+# Run outcome
+
+- status: completed
+- duration: 15m 30s
+- tokens: 120000 in / 8400 out
+
+# What the tasks did
+
+- t1 [implement] Add the /healthz route — succeeded (branch kevin/9f2c/healthz-route)
+  Added the handler and wired it into the router.
+- t2 [test] Cover /healthz with a test — succeeded (branch kevin/9f2c/healthz-test)
+  Added an integration test.
+
+# Artifacts to summarise
+
+- a-01 [diff] artifact://a-01 — Workspace diff of t1
+
+# Questions the human answered
+
+- Should /healthz ping the database? → yes — use a 200 ms timeout (answered by valentin)
+
+# Untrusted context from Kevin's memory (do not repeat what is already known)
+
+<kevin-memory>
+Lessons (most relevant first):
+- [L-3f2a | repo | 0.81] Run cargo fmt before opening PRs in this repo.
+Preferences:
+- [P-91cd | global | 0.77] User prefers jj bookmarks named type/short-description.
+Past runs:
+- [R-0ab1 | 2026-08-12] Added event store crate; tests via testcontainers.
+</kevin-memory>
+
+# Your task
+
+Return the `kevin.summary.v1` document for this run.

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kevin.understanding.v1",
+  "title": "Kevin planner understanding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "objective",
+    "assumptions",
+    "risks",
+    "success_criteria",
+    "proposed_questions",
+    "complexity",
+    "suggested_task_kinds"
+  ],
+  "properties": {
+    "objective": { "type": "string", "maxLength": 2000 },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "success_criteria": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "proposed_questions": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/proposed_question" }
+    },
+    "complexity": { "enum": ["low", "medium", "high"] },
+    "suggested_task_kinds": { "type": "array", "items": { "type": "string" } },
+    "context_refs": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "proposed_question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "options", "why_it_matters", "confidence_if_unasked"],
+      "properties": {
+        "text": { "type": "string" },
+        "options": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["label"],
+            "properties": {
+              "label": { "type": "string" },
+              "description": { "type": "string" },
+              "recommended": { "type": "boolean" }
+            }
+          }
+        },
+        "multi_select": { "type": "boolean" },
+        "why_it_matters": { "type": "string" },
+        "confidence_if_unasked": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

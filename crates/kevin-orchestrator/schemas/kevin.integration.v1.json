@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kevin.integration.v1",
+  "title": "Kevin integration report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "merged", "conflicts", "checks", "artifacts"],
+  "properties": {
+    "status": { "enum": ["integrated", "conflicts", "failed", "skipped"] },
+    "summary": { "type": "string", "maxLength": 600 },
+    "merged": { "type": "array", "items": { "type": "string" } },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "files", "description"],
+        "properties": {
+          "branch": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "description": { "type": "string", "maxLength": 600 }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "passed"],
+        "properties": {
+          "command": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "output_excerpt": { "type": "string", "maxLength": 2000 }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "uri"],
+        "properties": {
+          "kind": { "enum": ["diff", "file", "pr_url", "report", "json", "transcript"] },
+          "uri": { "type": "string" },
+          "description": { "type": "string", "maxLength": 300 }
+        }
+      }
+    },
+    "follow_up": { "type": "array", "items": { "type": "string", "maxLength": 300 } }
+  }
+}

@@ -1501,6 +1501,8 @@ dependencies = [
 name = "kevin-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "insta",
+ "jsonschema",
  "kevin-bus",
  "kevin-config",
  "kevin-domain",
@@ -1509,8 +1511,15 @@ dependencies = [
  "kevin-router",
  "kevin-store",
  "kevin-telemetry",
+ "kevin-testkit",
  "kevin-worker",
  "kevin-workspace",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
