@@ -1,0 +1,143 @@
+# The per-agent Kohral stack for Kevin (`plan/08-kohral-runtime.md` §6),
+# written out as Compose.
+#
+# This is the same shape Kohral's provisioner applies from
+# `KevinRuntimeStrategy::buildSpec()` (WS-24) — services `gateway` + `memory`,
+# two volumes, four secrets, one private project network — expressed in the one
+# format an operator can run by hand. Podman Compose project / k8s namespace /
+# Swarm stack are the other renderings of the same spec; keep them in sync.
+#
+#   podman compose -f deploy/kohral/compose.yml up -d
+#   curl -fsS http://127.0.0.1:8080/health
+#
+# Before the first `up`, create the secret files this stack binds:
+#
+#   mkdir -p deploy/kohral/secrets
+#   openssl rand -hex 32          > deploy/kohral/secrets/kohral-runtime-token
+#   openssl rand -hex 32          > deploy/kohral/secrets/postgres-password
+#   printf 'postgres://kevin:%s@memory:5432/kevin' \
+#       "$(cat deploy/kohral/secrets/postgres-password)" \
+#       > deploy/kohral/secrets/kevin-database-url
+#   cat > deploy/kohral/secrets/kevin-env <<'EOF'
+#   ANTHROPIC_API_KEY=…           # or CLAUDE_CODE_OAUTH_TOKEN=…
+#   OPENAI_API_KEY=…
+#   EOF
+#
+# and drop the read-only config files Kohral would mount into
+# `deploy/kohral/config/`: `kevin.toml` (the operator overlay), `AGENTS.md`
+# (mission), `SOUL.md` (persona + the `## Kohral` section) and
+# `KOHRAL_DOCUMENTATION.md`. All four are optional locally; without them Kevin
+# runs with its defaults and logs that it has no briefing.
+#
+# Secret bindings Kohral uses (`secretBindings()`):
+#   KEVIN_RUNTIME_TOKEN     -> API_SERVER_KEY   -> /run/secrets/kohral-runtime-token
+#   KEVIN_POSTGRES_PASSWORD -> POSTGRES_PASSWORD-> /run/secrets/postgres-password
+#   the composed DSN        -> kevin-database-url -> /run/secrets/kevin-database-url
+#                              (read through KEVIN__DATABASE__URL_FILE, so the
+#                               password never lands in the environment)
+#   provider credentials    -> kevin-env        -> /run/secrets/kevin-env
+#   (phase 2) agent identity                    -> /run/secrets/kohral-agent-identity
+
+name: kevin-agent
+
+services:
+  # `kevin serve --kohral`: the Hermes-dialect runtime contract on 8080.
+  gateway:
+    image: ${KEVIN_IMAGE:-ghcr.io/ligerian-labs/kevin-kohral:dev}
+    depends_on:
+      memory:
+        condition: service_healthy
+    environment:
+      # What Kohral injects: the DSN as a secret file, never as an env value.
+      KEVIN__DATABASE__URL_FILE: /run/secrets/kevin-database-url
+      # Fallback for a hand-run stack that would rather not maintain the DSN
+      # file: drop KEVIN__DATABASE__URL_FILE and the entrypoint composes the
+      # URL from these plus /run/secrets/postgres-password.
+      POSTGRES_HOST: memory
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: kevin
+      POSTGRES_DB: kevin
+      # Mediated collaboration API base (phase 2, `plan/08` §4). Empty is fine.
+      KOHRAL_COLLABORATION_URL: ${KOHRAL_COLLABORATION_URL:-}
+      KOHRAL_RUNTIME_TOKEN_FILE: /run/secrets/kohral-runtime-token
+    volumes:
+      - data:/opt/kevin/data
+      # Kohral writes these from the agent's anamnesis; read-only, always.
+      - ./config:/opt/kevin/config:ro
+    secrets:
+      - kohral-runtime-token
+      - kevin-database-url
+      - postgres-password
+      - kevin-env
+    ports:
+      # Kohral reaches the runtime inside the stack network; publishing is for
+      # local use only, hence loopback.
+      - "127.0.0.1:${KEVIN_KOHRAL_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    # `plan/08` §6: cpu 1 / mem 2G for the gateway, 0.5 / 1G for Postgres.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+    # Defence in depth inside the boundary the stack already is
+    # (`plan/09-security.md`): no new privileges, no engine socket, non-root
+    # (uid 10000 from the image). The root filesystem stays writable because
+    # the agent CLIs scribble in /tmp and in their own caches under $HOME.
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # Postgres 16 + pgvector — Kevin's event store, projections and memory.
+  memory:
+    image: ${KEVIN_MEMORY_IMAGE:-docker.io/pgvector/pgvector:pg16}
+    environment:
+      POSTGRES_USER: kevin
+      POSTGRES_DB: kevin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - memory-data:/var/lib/postgresql/data
+    secrets:
+      - postgres-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kevin -d kevin"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  # VolumeSpec('data', '5Gi', 10000, 10000) — data_dir, MEMORY.md, CLI state,
+  # workspaces, the embedding-model cache.
+  data:
+  # VolumeSpec('memory-data', '10Gi', 999, 999) — the Postgres cluster.
+  memory-data:
+
+secrets:
+  kohral-runtime-token:
+    file: ./secrets/kohral-runtime-token
+  kevin-database-url:
+    file: ./secrets/kevin-database-url
+  postgres-password:
+    file: ./secrets/postgres-password
+  kevin-env:
+    file: ./secrets/kevin-env
+
+# One isolated stack per agent: the project network is the only path between
+# the two services, and nothing but the published gateway port leaves it.
+networks:
+  default:
+    name: kevin-agent

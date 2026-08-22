@@ -1,0 +1,158 @@
+# Kohral runtime conformance (`plan/08-kohral-runtime.md` §8, WS-23).
+#
+# Builds the Kohral image, starts the real per-agent stack (gateway + pgvector)
+# in the conformance profile, and runs **Kohral's own**
+# `runtime/conformance/contract.py --runtime hermes` through its three phases:
+#
+#   basic         capabilities, model catalog, 401 on a wrong token,
+#                 submit → retry → 409, terminal `completed` with `kohral-ok`
+#   accept-crash  submit `[[KOHRAL_HOLD]]`, wait non-terminal, record the run id
+#   (crash)       kill the gateway container and start it again
+#   verify-crash  the run is `failed` with `error_code == runtime_restarted`
+#
+# The script lives in the private `Ligerian-labs/kohral` repository, so this
+# job **skips** — never fails — when it cannot be checked out. That keeps the
+# contract honest (it is always Kohral's current assertions, never a vendored
+# copy) without making Kevin's CI depend on a repository most forks cannot see.
+#
+# Deliberately a separate workflow: `ci.yml` is the `just ci` gate and must
+# stay fast and container-free.
+
+name: kohral-conformance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/kevin-kohral/**"
+      - "crates/kevin-cli/src/cmd/{serve,kohral}.rs"
+      - "deploy/kohral/**"
+      - ".github/workflows/kohral-conformance.yml"
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "crates/kevin-kohral/**"
+      - "deploy/kohral/**"
+      - ".github/workflows/kohral-conformance.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kohral-conformance:
+    name: kohral-conformance (linux/amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      IMAGE: kevin-kohral:ci
+      COMPOSE: deploy/kohral/compose.conformance.yaml
+      BASE_URL: http://127.0.0.1:8080
+    steps:
+      - uses: actions/checkout@v4
+
+      # Kohral is private; a missing token or no access is a skip, not a red X.
+      - name: Check out Kohral (for contract.py)
+        id: kohral
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: Ligerian-labs/kohral
+          path: .kohral
+          token: ${{ secrets.KOHRAL_REPO_TOKEN }}
+
+      - name: Locate contract.py
+        id: contract
+        run: |
+          script="$GITHUB_WORKSPACE/.kohral/runtime/conformance/contract.py"
+          if [ -f "$script" ]; then
+            echo "script=$script" >>"$GITHUB_OUTPUT"
+            echo "found=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "found=false" >>"$GITHUB_OUTPUT"
+            echo "::notice title=kohral-conformance::skipped — Kohral's runtime/conformance/contract.py is unavailable (private repository, no KOHRAL_REPO_TOKEN)."
+          fi
+
+      - name: Build the Kohral runtime image
+        if: steps.contract.outputs.found == 'true'
+        run: |
+          docker build \
+            -f deploy/kohral/Dockerfile \
+            --build-arg KEVIN_BUILD_GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BAKE_EMBEDDING_MODEL=0 \
+            -t "$IMAGE" .
+
+      - name: Start the conformance stack
+        if: steps.contract.outputs.found == 'true'
+        run: |
+          set -eu
+          mkdir -p deploy/kohral/secrets
+          openssl rand -hex 32 >deploy/kohral/secrets/kohral-runtime-token
+          KEVIN_IMAGE="$IMAGE" docker compose -f "$COMPOSE" up -d
+          for _ in $(seq 1 60); do
+            if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
+              echo "gateway is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "gateway never became healthy" >&2
+          docker compose -f "$COMPOSE" logs --no-color >&2
+          exit 1
+
+      - name: contract.py basic
+        if: steps.contract.outputs.found == 'true'
+        run: |
+          python3 "${{ steps.contract.outputs.script }}" basic \
+            --runtime hermes \
+            --base-url "$BASE_URL" \
+            --token "$(cat deploy/kohral/secrets/kohral-runtime-token)" \
+            --state-timeout 120
+
+      - name: contract.py accept-crash
+        if: steps.contract.outputs.found == 'true'
+        run: |
+          python3 "${{ steps.contract.outputs.script }}" accept-crash \
+            --runtime hermes \
+            --base-url "$BASE_URL" \
+            --token "$(cat deploy/kohral/secrets/kohral-runtime-token)" \
+            --state-timeout 120 \
+            --run-id-file run.id
+
+      # `docker kill` is the crash: no drain, no shutdown hook, no chance to
+      # terminalise anything. The ledger row must survive it as-is, and the
+      # next boot must be the thing that fails it.
+      - name: Kill and restart the gateway
+        if: steps.contract.outputs.found == 'true'
+        run: |
+          set -eu
+          KEVIN_IMAGE="$IMAGE" docker compose -f "$COMPOSE" kill -s SIGKILL gateway
+          KEVIN_IMAGE="$IMAGE" docker compose -f "$COMPOSE" up -d gateway
+          for _ in $(seq 1 60); do
+            if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
+              echo "gateway is back"; exit 0
+            fi
+            sleep 2
+          done
+          echo "gateway did not come back" >&2
+          docker compose -f "$COMPOSE" logs --no-color gateway >&2
+          exit 1
+
+      - name: contract.py verify-crash
+        if: steps.contract.outputs.found == 'true'
+        run: |
+          python3 "${{ steps.contract.outputs.script }}" verify-crash \
+            --runtime hermes \
+            --base-url "$BASE_URL" \
+            --token "$(cat deploy/kohral/secrets/kohral-runtime-token)" \
+            --state-timeout 120 \
+            --run-id-file run.id
+
+      - name: Stack logs
+        if: always() && steps.contract.outputs.found == 'true'
+        run: docker compose -f "$COMPOSE" logs --no-color || true
+
+      - name: Tear down
+        if: always() && steps.contract.outputs.found == 'true'
+        run: docker compose -f "$COMPOSE" down -v || true

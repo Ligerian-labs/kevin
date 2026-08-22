@@ -1,0 +1,60 @@
+{
+  "default": {
+    "reply": "kohral-ok"
+  },
+  "rules": [
+    {
+      "match": "[[KOHRAL_HOLD]]",
+      "hold": true
+    },
+    {
+      "match": "planner.understanding",
+      "structured": {
+        "assumptions": [],
+        "complexity": "low",
+        "objective": "Answer the operator's message.",
+        "proposed_questions": [],
+        "risks": [],
+        "success_criteria": [
+          "The operator gets an answer."
+        ],
+        "suggested_task_kinds": [
+          "write"
+        ]
+      }
+    },
+    {
+      "match": "planner.plan",
+      "structured": {
+        "rationale": "One turn, one answer.",
+        "tasks": [
+          {
+            "acceptance_criteria": [
+              "An answer exists."
+            ],
+            "allow_push": false,
+            "depends_on": [],
+            "id": "t1",
+            "instructions": "Reply to the operator.",
+            "kind": "write",
+            "optional": false,
+            "parallel_safe": true,
+            "title": "Answer",
+            "workspace_policy": "read_only"
+          }
+        ]
+      }
+    },
+    {
+      "match": "integrator",
+      "structured": {
+        "artifacts": [],
+        "checks": [],
+        "conflicts": [],
+        "merged": [],
+        "status": "integrated",
+        "summary": "kohral-ok"
+      }
+    }
+  ]
+}

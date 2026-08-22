@@ -1,0 +1,83 @@
+# The conformance stack (`plan/08-kohral-runtime.md` §8): the *real* image, the
+# real Postgres, the conformance profile — and Kohral's own
+# `runtime/conformance/contract.py --runtime hermes` pointed at it.
+#
+#   podman build -f deploy/kohral/Dockerfile -t kevin-kohral:dev .
+#   mkdir -p deploy/kohral/secrets && openssl rand -hex 32 > deploy/kohral/secrets/kohral-runtime-token
+#   podman compose -f deploy/kohral/compose.conformance.yaml up -d
+#   T=$(cat deploy/kohral/secrets/kohral-runtime-token)
+#   python3 ~/workspace/kohral/runtime/conformance/contract.py basic \
+#       --runtime hermes --base-url http://127.0.0.1:8080 --token "$T"
+#   python3 …/contract.py accept-crash  … --run-id-file run.id
+#   podman compose -f deploy/kohral/compose.conformance.yaml kill gateway
+#   podman compose -f deploy/kohral/compose.conformance.yaml up -d gateway
+#   python3 …/contract.py verify-crash … --run-id-file run.id
+#
+# `restart: "no"` on purpose: the crash phases own when the gateway comes back.
+# Differences from `compose.yml` are exactly the conformance ones — the
+# conformance config fragment, a throwaway database password, no provider
+# credentials (no real worker runs) and no embedding-model seeding.
+
+name: kevin-conformance
+
+services:
+  gateway:
+    image: ${KEVIN_IMAGE:-kevin-kohral:dev}
+    depends_on:
+      memory:
+        condition: service_healthy
+    environment:
+      KEVIN_CONFIG: /opt/kevin/config/conformance.toml
+      KEVIN__DATABASE__URL: postgres://kevin:kevin@memory:5432/kevin
+      KOHRAL_RUNTIME_TOKEN_FILE: /run/secrets/kohral-runtime-token
+      # The image bakes the fastembed cache; the conformance profile has
+      # memory off, so do not spend 130 MB of I/O seeding the volume.
+      KEVIN_SKIP_MODEL_SEED: "1"
+      KEVIN_MIGRATE_TIMEOUT: "180"
+      RUST_BACKTRACE: "1"
+    volumes:
+      - data:/opt/kevin/data
+      # conformance.toml + conformance-scenario.json, exactly where the
+      # fragment expects them.
+      - .:/opt/kevin/config:ro
+    secrets:
+      - kohral-runtime-token
+    ports:
+      - "127.0.0.1:${KEVIN_KOHRAL_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    restart: "no"
+
+  memory:
+    image: ${KEVIN_MEMORY_IMAGE:-docker.io/pgvector/pgvector:pg16}
+    environment:
+      POSTGRES_USER: kevin
+      POSTGRES_DB: kevin
+      # Throwaway stack, throwaway password: this database exists for the
+      # length of one CI job and is never published.
+      POSTGRES_PASSWORD: kevin
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - memory-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kevin -d kevin"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    restart: "no"
+
+volumes:
+  data:
+  memory-data:
+
+secrets:
+  kohral-runtime-token:
+    file: ./secrets/kohral-runtime-token
+
+networks:
+  default:
+    name: kevin-conformance
