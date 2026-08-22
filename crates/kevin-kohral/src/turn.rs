@@ -27,7 +27,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use kevin_domain::run::StartRun;
+use kevin_domain::run::{RoleOverrides, StartRun};
 use kevin_domain::{
     ArtifactId, ArtifactKind, ArtifactRef, Budget, Goal, ModelAlias, RepoKind, RunId, RunMode,
 };
@@ -268,6 +268,9 @@ pub fn accept(
             // A Kohral turn is headless by contract; the config flag is
             // irrelevant here (`plan/08` §3, `plan/05` §5).
             auto_approve_plans: true,
+            // `plan/08` §1.2: the turn's `model` becomes a role override for
+            // planner, judge and the routing default, for this run only.
+            role_overrides: role_overrides(resolution),
         },
         model_override: match resolution {
             Resolution::Alias(alias) => Some(alias.clone()),
@@ -275,6 +278,23 @@ pub fn accept(
         },
         session_id,
     }
+}
+
+/// The `[roles]` entries a resolved turn `model` replaces (`plan/08` §1.2).
+///
+/// `planner` and `judge` are named by the contract; `clarifier` and
+/// `integrator` follow because they are planner-shaped calls a Kohral operator
+/// would expect on the same model, and `default` is the routing fallback, so
+/// the tasks the plan produces run on the requested model instead of being
+/// Thompson-sampled onto another one.
+fn role_overrides(resolution: &Resolution) -> RoleOverrides {
+    let Resolution::Alias(alias) = resolution else {
+        return RoleOverrides::new();
+    };
+    ["planner", "clarifier", "judge", "integrator", "default"]
+        .into_iter()
+        .map(|role| (role.to_owned(), alias.clone()))
+        .collect()
 }
 
 /// Validates `Idempotency-Key` against `^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$`.
@@ -450,6 +470,56 @@ mod tests {
         );
         assert!(accepted.command.goal.cwd.ends_with(run_id.to_string()));
         assert!(accepted.model_override.is_none());
+        assert!(
+            accepted.command.role_overrides.is_empty(),
+            "no `model` in the turn means no override"
+        );
+    }
+
+    /// `plan/08` §1.2: a resolved `model` becomes a per-run role override on
+    /// the `StartRun` command, so the turn actually runs on the model the
+    /// operator picked. It used to be recorded on the ledger and ignored.
+    #[test]
+    fn ac_ws25_12_5_a_resolved_model_becomes_a_per_run_role_override() {
+        let alias = kevin_domain::ModelAlias::new("opus5-claude").expect("alias");
+        let accepted = accept(
+            RunId::new(),
+            &request(),
+            "turn-1",
+            Some("kohral:conv-1"),
+            &Resolution::Alias(alias.clone()),
+            &kevin_config::schema::Budget::default(),
+            &env(),
+        );
+        assert_eq!(accepted.model_override.as_ref(), Some(&alias));
+        let overrides = &accepted.command.role_overrides;
+        for role in ["planner", "clarifier", "judge", "integrator", "default"] {
+            assert_eq!(
+                overrides.get(role),
+                Some(&alias),
+                "`{role}` must be pinned to the turn's model"
+            );
+        }
+        assert_eq!(overrides.len(), 5, "nothing else is overridden");
+    }
+
+    /// An unknown model is a `400 unknown_model` at the route, never a silent
+    /// fallback to the configured roles.
+    #[test]
+    fn ac_ws25_12_6_an_unresolvable_model_overrides_nothing() {
+        for resolution in [Resolution::NoOverride, Resolution::Unknown] {
+            let accepted = accept(
+                RunId::new(),
+                &request(),
+                "turn-1",
+                None,
+                &resolution,
+                &kevin_config::schema::Budget::default(),
+                &env(),
+            );
+            assert!(accepted.command.role_overrides.is_empty(), "{resolution:?}");
+            assert!(accepted.model_override.is_none(), "{resolution:?}");
+        }
     }
 
     #[test]

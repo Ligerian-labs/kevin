@@ -407,6 +407,7 @@ pub mod run {
             budget: values::budget(),
             requested_by: "valentin".to_owned(),
             auto_approve_plans: false,
+            role_overrides: kevin_domain::RoleOverrides::new(),
         }
     }
 
@@ -617,6 +618,7 @@ pub mod run {
             budget: cmd.budget.clone(),
             requested_by: cmd.requested_by.clone(),
             auto_approve_plans: cmd.auto_approve_plans,
+            role_overrides: cmd.role_overrides.clone(),
         }
     }
 

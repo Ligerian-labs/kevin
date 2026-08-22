@@ -190,6 +190,8 @@ pub struct Harness {
     pub task_log: Arc<TaskLog>,
     /// Saga tick interval.
     pub tick: Duration,
+    /// Per-run `[roles]` overrides every [`Harness::start`] passes.
+    pub role_overrides: kevin_domain::RoleOverrides,
     /// Everything needed to build a fresh [`Deps`] (reboot).
     ports: Ports,
     /// The live engine.
@@ -354,6 +356,7 @@ impl Harness {
             workers,
             task_log,
             tick,
+            role_overrides: kevin_domain::RoleOverrides::new(),
             ports,
             handle,
         }
@@ -397,6 +400,7 @@ impl Harness {
                     budget,
                     requested_by: "tester".to_owned(),
                     auto_approve_plans: false,
+                    role_overrides: self.role_overrides.clone(),
                 },
                 &ctx,
             )
@@ -780,6 +784,7 @@ impl Services {
             budget: default_budget(),
             requested_by: "tester".to_owned(),
             auto_approve_plans: false,
+            role_overrides: kevin_domain::RoleOverrides::new(),
         }
     }
 }

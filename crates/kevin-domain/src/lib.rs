@@ -56,7 +56,7 @@ pub use memory_item::{MemoryItem, MemoryItemCommand, MemoryItemEvent};
 pub use plan::{Plan, PlanEdge, PlanError, PlanTask, PlanValidator};
 pub use question::{Question, QuestionCommand, QuestionEvent};
 pub use route_score::{RouteScore, RouteScoreCommand, RouteScoreEvent, RouteStats};
-pub use run::{Run, RunCommand, RunEvent, RunStatus};
+pub use run::{RoleOverrides, Run, RunCommand, RunEvent, RunStatus};
 pub use rust_decimal::Decimal;
 pub use task::{Attempt, Task, TaskCommand, TaskEvent, TaskStatus};
 pub use understanding::{ProposedQuestion, Understanding};

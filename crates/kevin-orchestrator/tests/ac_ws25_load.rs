@@ -34,7 +34,7 @@ use kevin_worker::fake::{Rule, Scenario};
 use tokio_util::sync::CancellationToken;
 
 /// How many plan tasks the run carries.
-const TASKS: usize = 50;
+const TASKS: u32 = 50;
 /// The bulkhead under test.
 const MAX_PARALLEL: u16 = 8;
 /// Generous: a fake attempt takes ~30 ms, so 50 of them at 8-wide is seconds.
@@ -92,7 +92,7 @@ async fn ac_ws25_10_1_fifty_fake_tasks_respect_the_bulkheads_and_stay_bounded() 
     let roles = Arc::new(
         ScriptedRoles::new()
             .with_understanding(understanding("fifty small things"))
-            .with_plan(plan_of(TASKS)),
+            .with_plan(plan_of(TASKS as usize)),
     );
     // Each attempt is slower than the saga tick, so attempts genuinely pile up
     // and the semaphore is exercised instead of the run trickling one task per
@@ -112,7 +112,7 @@ async fn ac_ws25_10_1_fifty_fake_tasks_respect_the_bulkheads_and_stay_bounded() 
                 config.budget.max_parallel_tasks = 64;
                 // The default plan cap is 24 tasks; this scenario is about
                 // what happens past it.
-                config.orchestrator.max_tasks_per_run = TASKS as u32;
+                config.orchestrator.max_tasks_per_run = TASKS;
             }),
     )
     .await;
@@ -169,12 +169,12 @@ async fn ac_ws25_10_1_fifty_fake_tasks_respect_the_bulkheads_and_stay_bounded() 
     // -- the run actually did the work ---------------------------------------
     assert_eq!(
         count(&events, "task.created"),
-        TASKS,
+        TASKS as usize,
         "the plan did not produce {TASKS} tasks"
     );
     assert_eq!(
         count(&events, "task.attempt_succeeded"),
-        TASKS,
+        TASKS as usize,
         "not every task succeeded"
     );
     assert_eq!(count(&events, "run.completed"), 1);
@@ -216,7 +216,7 @@ async fn ac_ws25_10_1_fifty_fake_tasks_respect_the_bulkheads_and_stay_bounded() 
         .fetch_one(harness.db.pool())
         .await
         .expect("count task_board");
-    assert_eq!(rows, TASKS as i64, "the board is missing tasks");
+    assert_eq!(rows, i64::from(TASKS), "the board is missing tasks");
 
     // -- memory stayed bounded ------------------------------------------------
     // The engine keeps per-*attempt* state, so 50 tasks at 8-wide must not

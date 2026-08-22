@@ -215,17 +215,13 @@ async fn submit(state: &KohralState, headers: &HeaderMap, body: &[u8]) -> Kohral
     );
     let message_id = turn::assistant_message_id(run_id);
     if let Some(alias) = &accepted.model_override {
-        // `plan/08` §1.2 wants the override applied as a role override for
-        // planner/judge/default. `StartRun` is a frozen interface with no
-        // per-run role field (`plan/12` WS-01), so the alias is validated,
-        // recorded on the ledger and surfaced here; applying it needs a plan
-        // PR adding role overrides to `StartRun`. Advertising it as accepted
-        // and silently ignoring it would be worse than saying so.
-        tracing::warn!(
+        // `plan/08` §1.2: applied as a per-run `[roles]` override on the
+        // `StartRun` command (`plan/02` §Run), not by mutating configuration —
+        // the daemon serves other runs concurrently.
+        tracing::info!(
             { kevin_telemetry::fields::KOHRAL_TURN_ID } = %key,
             alias = alias.as_str(),
-            "the turn requested a model override; Kevin recorded it but runs \
-             the configured roles (per-run role overrides need a plan change)"
+            "the turn pinned a model; applying it as a per-run role override"
         );
     }
 

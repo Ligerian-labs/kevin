@@ -336,6 +336,9 @@ impl Worker for VanishingBinary {
 // (5) A subscriber too slow for the bus
 // ---------------------------------------------------------------------------
 
+/// Far wider than the bus channel, so lag is certain rather than likely.
+const BURST: u32 = 200;
+
 /// A projection that falls behind a bounded broadcast channel is told it lagged
 /// and heals from the store; it must never silently skip the events it missed.
 ///
@@ -344,8 +347,6 @@ impl Worker for VanishingBinary {
 #[tokio::test(flavor = "multi_thread")]
 async fn ac_ws25_5_1_a_slow_projection_lags_and_still_reaches_the_head() {
     kevin_testkit::skip_unless_pg!();
-    /// Far wider than the channel, so lag is certain rather than likely.
-    const BURST: u32 = 200;
     let db = TestDb::new().await;
     let store = Arc::new(PgEventStore::new(db.pool().clone()));
     // Capacity 1 and no history: any burst larger than one event makes the

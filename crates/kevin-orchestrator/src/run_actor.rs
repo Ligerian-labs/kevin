@@ -22,6 +22,7 @@ use chrono::{DateTime, Utc};
 use kevin_bus::BusEvent;
 use kevin_config::Role;
 use kevin_domain::question::{AskQuestion, QuestionEvent};
+use kevin_domain::run::RoleOverrides;
 use kevin_domain::run::{
     ExhaustBudget, FailRun, MarkEvaluated, MarkIntegrated, NoteQuestionAnswered, NoteTaskTerminal,
     ProposePlan, RecordUnderstanding, RunEvaluation, RunEvent, StartExecution, StartUnderstanding,
@@ -982,8 +983,10 @@ impl RunActor {
         let goal = self.goal();
         let mode = self.mode();
         let needs_start = self.view.run.status() == RunStatus::Received;
-        self.jobs
-            .spawn(async move { understanding_job(deps, run_id, goal, mode, needs_start).await });
+        let overrides = self.view.run.role_overrides().clone();
+        self.jobs.spawn(async move {
+            understanding_job(deps, run_id, goal, mode, needs_start, overrides).await
+        });
     }
 
     fn start_planning(&mut self) {
@@ -1005,6 +1008,7 @@ impl RunActor {
         let answers = self.view.answers();
         let previous_plan = self.view.run.plan().cloned();
         let feedback = self.plan_feedback();
+        let overrides = self.view.run.role_overrides().clone();
         self.jobs.spawn(async move {
             planning_job(
                 deps,
@@ -1015,6 +1019,7 @@ impl RunActor {
                 answers,
                 previous_plan,
                 feedback,
+                overrides,
             )
             .await
         });
@@ -1462,8 +1467,14 @@ impl RunActor {
         if !needs_route {
             return self.routes.get(&task_id).cloned();
         }
-        let selection = if let Some(role) = role_for_kind(kind) {
-            match role_route(&self.deps.config, role) {
+        let overrides = self.view.run.role_overrides().clone();
+        let role_route_for = role_for_kind(kind)
+            .map(|role| role_route(&self.deps.config, role, &overrides))
+            // A plan task has no role, but the run may still have pinned the
+            // routing `default`, in which case the router is bypassed.
+            .or_else(|| default_override(&self.deps.config, &overrides));
+        let selection = if let Some(route) = role_route_for {
+            match route {
                 Ok(route) => crate::ports::RouteSelection::fixed(route),
                 Err(message) => {
                     self.request_failure(
@@ -1676,9 +1687,10 @@ impl RunActor {
             .iter()
             .flat_map(|t| t.artifacts().to_vec())
             .collect();
+        let overrides = self.view.run.role_overrides().clone();
         self.jobs.spawn(async move {
             integration_job(
-                deps, run_id, goal, criteria, workspaces, summaries, artifacts,
+                deps, run_id, goal, criteria, workspaces, summaries, artifacts, overrides,
             )
             .await
         });
@@ -1869,13 +1881,30 @@ const fn role_for_kind(kind: &TaskKind) -> Option<Role> {
     }
 }
 
-/// The `[roles]` route for `role`, resolved through `[models]`.
-pub fn role_route(config: &kevin_config::KevinConfig, role: Role) -> Result<Route, String> {
-    let alias = config.roles.alias_for(role).clone();
-    let entry = config
-        .models
-        .get(&alias)
-        .ok_or_else(|| format!("roles.{} = `{alias}` is not in [models]", role.as_str()))?;
+/// The route for `role`: the run's per-run override when it has one, otherwise
+/// the configured `[roles]` entry, resolved through `[models]`.
+///
+/// `overrides` comes from `StartRun.role_overrides` (`plan/02` §Run,
+/// `plan/05` §3.1). Pass an empty map for a run that did not ask for one.
+pub fn role_route(
+    config: &kevin_config::KevinConfig,
+    role: Role,
+    overrides: &RoleOverrides,
+) -> Result<Route, String> {
+    let overridden = overrides.get(role.as_str());
+    let alias = overridden
+        .cloned()
+        .unwrap_or_else(|| config.roles.alias_for(role).clone());
+    let entry = config.models.get(&alias).ok_or_else(|| {
+        if overridden.is_some() {
+            format!(
+                "role_overrides.{} = `{alias}` is not in [models]",
+                role.as_str()
+            )
+        } else {
+            format!("roles.{} = `{alias}` is not in [models]", role.as_str())
+        }
+    })?;
     Ok(Route {
         worker: entry.worker,
         model: alias,
@@ -1883,20 +1912,50 @@ pub fn role_route(config: &kevin_config::KevinConfig, role: Role) -> Result<Rout
     })
 }
 
+/// The routing `default` override, as a fixed route, when the run asked for
+/// one (`plan/08` §1.2: the turn's model replaces the routing default).
+fn default_override(
+    config: &kevin_config::KevinConfig,
+    overrides: &RoleOverrides,
+) -> Option<Result<Route, String>> {
+    // `roles.default` is a config *field*, not a `Role` variant (the enum
+    // covers only the four named roles), so the key is spelled out.
+    let alias = overrides.get(DEFAULT_ROLE_KEY)?.clone();
+    Some(config.models.get(&alias).map_or_else(
+        || {
+            Err(format!(
+                "role_overrides.default = `{alias}` is not in [models]"
+            ))
+        },
+        |entry| {
+            Ok(Route {
+                worker: entry.worker,
+                model: alias.clone(),
+                effort: None,
+            })
+        },
+    ))
+}
+
+/// `role_overrides` key for the routing fallback (`roles.default`).
+pub const DEFAULT_ROLE_KEY: &str = "default";
+
 // ---------------------------------------------------------------------------
 // Phase jobs
 // ---------------------------------------------------------------------------
 
 /// `run.started` → memory retrieval → planner `understanding` call →
 /// `RecordUnderstanding` → `AskQuestion` ×N (`plan/05` §3.1–§3.2).
+#[allow(clippy::too_many_arguments)]
 async fn understanding_job(
     deps: Arc<OrchestratorDeps>,
     run_id: RunId,
     goal: Goal,
     mode: RunMode,
     needs_start: bool,
+    overrides: RoleOverrides,
 ) -> PhaseOutcome {
-    let route = match role_route(&deps.config, Role::Planner) {
+    let route = match role_route(&deps.config, Role::Planner, &overrides) {
         Ok(route) => route,
         Err(message) => {
             return PhaseOutcome::Failed {
@@ -2026,8 +2085,9 @@ async fn planning_job(
     answers: Vec<AnsweredQuestion>,
     previous_plan: Option<Plan>,
     feedback: Option<String>,
+    overrides: RoleOverrides,
 ) -> PhaseOutcome {
-    let route = match role_route(&deps.config, Role::Planner) {
+    let route = match role_route(&deps.config, Role::Planner, &overrides) {
         Ok(route) => route,
         Err(message) => {
             return PhaseOutcome::Failed {
@@ -2121,6 +2181,7 @@ async fn planning_job(
 }
 
 /// `all tasks terminal` → integrator (`plan/05` §3.6).
+#[allow(clippy::too_many_arguments)]
 async fn integration_job(
     deps: Arc<OrchestratorDeps>,
     run_id: RunId,
@@ -2129,6 +2190,7 @@ async fn integration_job(
     workspaces: Vec<kevin_domain::Workspace>,
     summaries: Vec<String>,
     task_artifacts: Vec<ArtifactRef>,
+    overrides: RoleOverrides,
 ) -> PhaseOutcome {
     let integration = deps.config.workspace.integration;
     let outcome = if integration == kevin_config::Integration::None || workspaces.is_empty() {
@@ -2165,7 +2227,7 @@ async fn integration_job(
     } else {
         summaries.join("; ")
     };
-    let summary = match role_route(&deps.config, Role::Integrator) {
+    let summary = match role_route(&deps.config, Role::Integrator, &overrides) {
         Ok(route) => {
             let ctx = crate::ports::IntegrateContext {
                 run_id,

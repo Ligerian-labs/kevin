@@ -74,50 +74,6 @@ pub fn read_token_file(path: &Path) -> io::Result<String> {
     Ok(std::fs::read_to_string(path)?.trim().to_owned())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn base64url_matches_known_vectors() {
-        assert_eq!(base64url(b""), "");
-        assert_eq!(base64url(b"f"), "Zg");
-        assert_eq!(base64url(b"fo"), "Zm8");
-        assert_eq!(base64url(b"foo"), "Zm9v");
-        assert_eq!(base64url(b"foob"), "Zm9vYg");
-        assert_eq!(base64url(&[0xfb, 0xff]), "-_8");
-    }
-
-    #[test]
-    fn tokens_are_43_chars_and_unique() {
-        let a = generate_token();
-        let b = generate_token();
-        assert_eq!(a.len(), 43);
-        assert_ne!(a, b);
-        assert!(
-            a.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        );
-    }
-
-    #[test]
-    fn write_creates_parents_and_is_private() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("nested/deeper/token");
-        write_token_file(&path, "abc").unwrap();
-        assert_eq!(read_token_file(&path).unwrap(), "abc");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "abc\n");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt as _;
-            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-            assert_eq!(mode, 0o600);
-        }
-        write_token_file(&path, "def").unwrap();
-        assert_eq!(read_token_file(&path).unwrap(), "def");
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Startup check for a non-loopback bind
 // ---------------------------------------------------------------------------
@@ -197,4 +153,48 @@ fn token_state(path: &Path) -> TokenState {
         }
     }
     TokenState::Ok
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base64url_matches_known_vectors() {
+        assert_eq!(base64url(b""), "");
+        assert_eq!(base64url(b"f"), "Zg");
+        assert_eq!(base64url(b"fo"), "Zm8");
+        assert_eq!(base64url(b"foo"), "Zm9v");
+        assert_eq!(base64url(b"foob"), "Zm9vYg");
+        assert_eq!(base64url(&[0xfb, 0xff]), "-_8");
+    }
+
+    #[test]
+    fn tokens_are_43_chars_and_unique() {
+        let a = generate_token();
+        let b = generate_token();
+        assert_eq!(a.len(), 43);
+        assert_ne!(a, b);
+        assert!(
+            a.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        );
+    }
+
+    #[test]
+    fn write_creates_parents_and_is_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/deeper/token");
+        write_token_file(&path, "abc").unwrap();
+        assert_eq!(read_token_file(&path).unwrap(), "abc");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "abc\n");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+        write_token_file(&path, "def").unwrap();
+        assert_eq!(read_token_file(&path).unwrap(), "def");
+    }
 }

@@ -94,6 +94,7 @@ fn executing_run(budget: Budget, task_ids: &[TaskId]) -> Run {
         budget,
         requested_by: "proptest".to_owned(),
         auto_approve_plans: true,
+        role_overrides: kevin_domain::RoleOverrides::new(),
     };
     let started = run.handle(&RunCommand::Start(cmd)).expect("start");
     apply_all(&mut run, &started);
@@ -157,7 +158,7 @@ struct Outcome {
 /// Each round admits every ready task the gate allows (up to `max_parallel`),
 /// then completes **one** of the in-flight attempts — the worst case for the
 /// overshoot bound, because the other in-flight attempts keep spending.
-fn simulate(budget: Budget, tasks: &[GenTask]) -> Outcome {
+fn simulate(budget: &Budget, tasks: &[GenTask]) -> Outcome {
     let ids: Vec<TaskId> = tasks.iter().map(|_| TaskId::new()).collect();
     let mut run = executing_run(budget.clone(), &ids);
     let max_parallel = usize::from(budget.max_parallel.max(1));
@@ -244,7 +245,7 @@ proptest! {
         budget in gen_budget(),
         tasks in gen_plan(),
     ) {
-        let outcome = simulate(budget.clone(), &tasks);
+        let outcome = simulate(&budget, &tasks);
 
         if let Some(limit) = budget.max_usd {
             let spent = outcome.final_usage.cost_usd.unwrap_or_default();
@@ -279,7 +280,7 @@ proptest! {
         budget in gen_budget(),
         tasks in gen_plan(),
     ) {
-        let outcome = simulate(budget.clone(), &tasks);
+        let outcome = simulate(&budget, &tasks);
         prop_assert!(
             outcome.exhausted_events <= 1,
             "{} budget_exhausted events",
@@ -304,7 +305,7 @@ proptest! {
         budget in gen_budget(),
         tasks in gen_plan(),
     ) {
-        let outcome = simulate(budget.clone(), &tasks);
+        let outcome = simulate(&budget, &tasks);
         if outcome.never_admitted > 0 {
             prop_assert!(
                 budget.exceeded_by(&outcome.final_usage).is_some(),
@@ -320,7 +321,7 @@ proptest! {
             max_tokens: None,
             ..budget
         };
-        let free = simulate(unlimited, &tasks);
+        let free = simulate(&unlimited, &tasks);
         prop_assert_eq!(free.never_admitted, 0);
         prop_assert_eq!(free.exhausted_events, 0);
     }

@@ -58,7 +58,11 @@ impl Seeded {
             )
             .await
             .expect("judged");
-        let record = repo.evaluation(id).await.unwrap().expect("row");
+        let record = repo
+            .evaluation(id)
+            .await
+            .expect("read the evaluation")
+            .expect("row");
         let proposal = record
             .proposals
             .first()

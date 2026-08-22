@@ -156,7 +156,8 @@ sequenceDiagram
 
 ### 3.1 Intake
 
-`StartRun { goal: Goal, mode, budget: Option<Budget>, requested_by }`.
+`StartRun { goal: Goal, mode, budget: Option<Budget>, requested_by,
+role_overrides: BTreeMap<String, ModelAlias> }`.
 
 - `Goal.text` trimmed; attachments copied under
   `data_dir/runs/<run_id>/attachments/` and registered as `ArtifactRef`s.
@@ -164,6 +165,20 @@ sequenceDiagram
   `Git`, else `None` (workspace strategy then resolves to `in_place`).
 - Budget = `config.budget` defaults merged with the command's overrides; Kohral
   mode caps `max_wall` to `kohral.run_timeout`.
+- `role_overrides` replaces `[roles]` entries **for this run only**, by role
+  name. `planner`/`clarifier`/`integrator` change the fixed route those phases
+  use, and `judge` covers an `Evaluate` task in the plan; `default` replaces the
+  router's fallback, so every other task the plan produces runs on the requested
+  alias instead of being Thompson-sampled. The override is applied where the
+  route is chosen (`role_route`, `route_for`), so it survives retries and a
+  runtime restart; an alias missing from `[models]` fails the run `no_route`
+  with the same message a bad `roles.*` produces.
+- Not yet covered: the **run-level** evaluation at the end of a run goes through
+  `EvaluatorPort::evaluate_run`, which picks its judge from `roles.judge` and
+  the anti-gaming candidate list ([06](./06-memory-and-learning.md) §3) without
+  seeing the run. Honouring `role_overrides.judge` there means passing the
+  override through the port into `kevin-evaluator`'s judge selection; until then
+  a Kohral turn's model choice applies to the work, not to the final judging.
 - Memory retrieval (`kevin-memory::retrieve`): query = goal text + repo name +
   top-level file listing summary; `top_k` from config, partitioned
   `lessons ≥ 3`, `preferences ≥ 2`, `run_summaries ≤ 3`. Injected into the
