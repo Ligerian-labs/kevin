@@ -332,9 +332,9 @@ async fn ac_ws20_4_metrics_endpoint_exposes_the_documented_names() {
 /// invisible to Prometheus, so the table in plan/10 would be a lie.
 #[test]
 fn ac_ws20_4_every_documented_metric_is_emitted_somewhere() {
-    /// Owned by WS-22 (`kevin-kohral` does not exist yet); everything else
-    /// must have a call site today.
-    const PENDING: &[&str] = &["kevin_kohral_turns_total", "kevin_kohral_turns_active"];
+    /// Every documented metric now has a call site; the list stays so a new
+    /// declaration can be parked deliberately rather than by accident.
+    const PENDING: &[&str] = &[];
 
     let sources = production_sources(&repo_root().join("crates"));
     assert!(sources.len() > 50, "found only {} sources", sources.len());
@@ -496,14 +496,103 @@ async fn ac_ws20_5_a_client_attaches_with_a_token_and_rotation_needs_no_downtime
 // Operations
 // ---------------------------------------------------------------------------
 
-#[test]
-fn serve_kohral_fails_cleanly_until_ws22_lands() {
-    let harness = Harness::offline();
-    harness
-        .kevin_raw(&["serve", "--kohral"])
-        .assert()
-        .code(2)
-        .stderr(predicates::str::contains("WS-22"));
+/// `kevin serve --kohral` binds the Kohral runtime contract on `kohral.bind`
+/// next to the operator API (`plan/08-kohral-runtime.md` §6): a second
+/// listener, a second token, one runtime behind both.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn serve_kohral_serves_the_runtime_contract() {
+    kevin_testkit::skip_unless_pg!();
+    let harness = Harness::with_scenario(SCENARIO).await;
+    let daemon = harness.serve(&["--kohral", "--bind", "127.0.0.1:0"]).await;
+    let kohral = daemon
+        .kohral_url()
+        .expect("--kohral must announce its listener")
+        .to_owned();
+    let client = reqwest::Client::new();
+
+    // `/health` is the unauthenticated probe Kohral polls.
+    let health = client
+        .get(format!("{kohral}/health"))
+        .send()
+        .await
+        .expect("GET /health");
+    assert_eq!(health.status(), 200);
+    let body: serde_json::Value = health.json().await.expect("health body");
+    assert_eq!(body["platform"], "kevin");
+    assert_eq!(body["status"], "ok");
+
+    // The contract Kohral gates compatibility on, behind the Kohral token.
+    let capabilities = client
+        .get(format!("{kohral}/v1/capabilities"))
+        .bearer_auth(harness.kohral_token())
+        .send()
+        .await
+        .expect("GET /v1/capabilities");
+    assert_eq!(capabilities.status(), 200);
+    let body: serde_json::Value = capabilities.json().await.expect("capabilities body");
+    for flag in [
+        "run_idempotency_persistent",
+        "run_status_persistent",
+        "run_partial_output",
+        "session_resources",
+        "runtime_wide_drain",
+        "runtime_model_catalog_v1",
+    ] {
+        assert_eq!(body["features"][flag], true, "{flag}: {body}");
+    }
+    assert_eq!(
+        body["features"]["run_restart_failure_code"],
+        "runtime_restarted"
+    );
+    assert_eq!(body["features"]["run_automatic_replay"], false);
+
+    // The model catalog is served too, and the operator API token is not
+    // accepted here: the two surfaces never share credentials.
+    let models = client
+        .get(format!("{kohral}/v1/kohral/models"))
+        .bearer_auth(harness.kohral_token())
+        .send()
+        .await
+        .expect("GET /v1/kohral/models");
+    assert_eq!(models.status(), 200);
+    let body: serde_json::Value = models.json().await.expect("catalog body");
+    assert_eq!(body["object"], "kohral.runtime_model_catalog");
+    assert_eq!(body["version"], 1);
+
+    let wrong = client
+        .get(format!("{kohral}/v1/capabilities"))
+        .bearer_auth(harness.token())
+        .send()
+        .await
+        .expect("GET with the API token");
+    assert!(
+        matches!(wrong.status().as_u16(), 401 | 403),
+        "{}",
+        wrong.status()
+    );
+
+    // And the operator API is still the operator API.
+    let (status, _) = daemon.get("/healthz").await;
+    assert_eq!(status, 200);
+
+    daemon.signal("TERM");
+    daemon.wait(Duration::from_secs(45)).await;
+    harness.close().await;
+}
+
+/// Without `--kohral` there is no second listener at all.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn serve_without_kohral_binds_only_the_api() {
+    kevin_testkit::skip_unless_pg!();
+    let harness = Harness::with_scenario(SCENARIO).await;
+    let daemon = harness.serve(&["--bind", "127.0.0.1:0"]).await;
+    assert!(
+        daemon.kohral_url().is_none(),
+        "the Kohral contract is opt-in"
+    );
+    daemon.signal("TERM");
+    daemon.wait(Duration::from_secs(45)).await;
+    harness.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

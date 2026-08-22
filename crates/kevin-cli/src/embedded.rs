@@ -39,6 +39,7 @@ use kevin_orchestrator::ports::{
 use kevin_orchestrator::projections;
 use kevin_orchestrator::projections::{ProjectionRunner, ReadModels, TaskLog};
 use kevin_orchestrator::role_port::RoleRunnerRoles;
+use kevin_orchestrator::roles::SystemContextProvider;
 use kevin_orchestrator::services::{QuestionService, RunService, ServiceCore, TaskService};
 use kevin_orchestrator::{LocalWorkspace, RolesPort};
 use kevin_router::{
@@ -198,6 +199,24 @@ impl Backend {
         &self.questions
     }
 
+    /// The command idempotency log (`core.processed_commands`), erased.
+    #[must_use]
+    pub fn commands_erased(&self) -> Arc<dyn kevin_orchestrator::ports::CommandIdempotency> {
+        Arc::clone(&self.commands) as Arc<dyn kevin_orchestrator::ports::CommandIdempotency>
+    }
+
+    /// The clock, erased.
+    #[must_use]
+    pub fn clock_erased(&self) -> Arc<dyn Clock> {
+        Arc::clone(&self.clock) as Arc<dyn Clock>
+    }
+
+    /// The id generator, erased.
+    #[must_use]
+    pub fn ids_erased(&self) -> Arc<dyn IdGen> {
+        Arc::clone(&self.ids) as Arc<dyn IdGen>
+    }
+
     /// Deterministic id generator.
     #[must_use]
     pub fn ids(&self) -> &Arc<UuidV7IdGen> {
@@ -255,6 +274,23 @@ impl EmbeddedRuntime {
     /// derived from.
     pub async fn start_in(config: Arc<KevinConfig>, repo_root: &Path) -> anyhow::Result<Self> {
         let backend = Backend::open(Arc::clone(&config)).await?;
+        Self::boot_on(backend, repo_root, Vec::new()).await
+    }
+
+    /// [`EmbeddedRuntime::start_in`] on a [`Backend`] the caller already
+    /// opened, with extra platform briefings.
+    ///
+    /// The seam exists for `kevin serve --kohral`: the Kohral contract requires
+    /// the `runtime_restarted` sweep to run **before** the supervisor rebuilds
+    /// actors (`plan/08-kohral-runtime.md` §1.9), and the briefing provider to
+    /// be in place before the first role call (§5.1). Both need an open
+    /// database and neither belongs in this crate.
+    pub async fn boot_on(
+        backend: Backend,
+        repo_root: &Path,
+        system_context: Vec<Arc<dyn SystemContextProvider>>,
+    ) -> anyhow::Result<Self> {
+        let config = Arc::clone(backend.config());
         let cancel = CancellationToken::new();
 
         let workers = Arc::new(
@@ -308,7 +344,7 @@ impl EmbeddedRuntime {
             config: Arc::clone(&config),
             clock: Arc::clone(&backend.clock) as Arc<dyn Clock>,
             ids: Arc::clone(&backend.ids) as Arc<dyn IdGen>,
-            system_context: Vec::new(),
+            system_context,
             task_log: Some(task_log),
             tick_interval: DEFAULT_TICK,
         })

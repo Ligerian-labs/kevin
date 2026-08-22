@@ -25,6 +25,16 @@
 //! other left behind. `SIGHUP` re-reads `server.auth_token_file` so
 //! `kevin config rotate-token` needs no downtime, and `/metrics` is served on
 //! `telemetry.metrics_bind` only — never on the API bind (plan/10 §Metrics).
+//!
+//! With `--kohral` (or `kevin.profile = "kohral"`) a **second** listener is
+//! bound on `kohral.bind` serving `kevin-kohral`'s Hermes-dialect contract
+//! (`plan/08-kohral-runtime.md` §6). It is a separate listener with a separate
+//! token on purpose: the operator API and the platform contract never share
+//! credentials. Two extra steps slot into the sequence around the runtime:
+//! `kevin_kohral::sweep_runtime_restarted` runs at step 5, *before* the
+//! supervisor rebuilds actors, so a turn that did not survive the last restart
+//! is terminal before anything can resume it; and the platform briefing is
+//! registered as a `SystemContextProvider` before the first role call.
 
 use std::net::SocketAddr;
 use std::process::ExitCode;
@@ -44,7 +54,7 @@ use kevin_store::{Db, PgPool};
 use kevin_telemetry::{TelemetryConfig, events, fields};
 use tokio_util::sync::CancellationToken;
 
-use crate::embedded::EmbeddedRuntime;
+use crate::embedded::{Backend, EmbeddedRuntime};
 use crate::{Ctx, ExitError, exit};
 
 /// Subcommand name.
@@ -73,20 +83,13 @@ pub fn command() -> clap::Command {
 
 /// Runs `kevin serve`.
 pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
-    if args.kohral {
-        // The Kohral listener, ledger and conformance wrapper are WS-22
-        // (`plan/08-kohral-runtime.md`). Failing here is better than binding a
-        // plain Kevin API on `kohral.bind` and letting Kohral talk to it.
-        return Err(ExitError::new(
-            exit::NOT_IMPLEMENTED,
-            "`kevin serve --kohral` is not implemented yet (WS-22): the Kohral runtime \
-             contract lands with the `kevin-kohral` crate",
-        )
-        .into());
-    }
-
     // ---- 1. configuration ---------------------------------------------------
-    let resolved = Arc::new(load(ctx, args.bind.as_deref())?);
+    let mut loaded = load(ctx, args.bind.as_deref())?;
+    // `--kohral` is shorthand for the profile's `kohral.enabled`; the profile
+    // sets it too, so either way in reaches the same flag.
+    loaded.config.kohral.enabled |= args.kohral;
+    let kohral_enabled = loaded.config.kohral.enabled;
+    let resolved = Arc::new(loaded);
     let config = Arc::new(resolved.config.clone());
 
     // ---- 2. telemetry -------------------------------------------------------
@@ -120,7 +123,7 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
     pool.close().await;
 
     // ---- 5.–8. runtime ------------------------------------------------------
-    let runtime = EmbeddedRuntime::start(Arc::clone(&config)).await?;
+    let runtime = boot(&config, kohral_enabled).await?;
     let observers = crate::observability::spawn(
         runtime.backend().bus_erased(),
         runtime.backend().pool().clone(),
@@ -154,18 +157,29 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
         })
     };
 
+    // ---- 9b. the Kohral contract listener -----------------------------------
+    let kohral = if kohral_enabled {
+        Some(serve_kohral(&runtime, &config).await?)
+    } else {
+        None
+    };
+
     tracing::info!(
         { fields::EVENT } = events::startup::READY,
         version = crate::VERSION,
         bind = %local,
+        kohral = kohral.as_ref().map(|k| k.address.to_string()).unwrap_or_default(),
         docs = config.server.docs,
         "kevin is ready"
     );
     if !ctx.global.quiet {
-        // The API line comes last: it is the marker "the daemon is ready".
         if let Some(metrics) = guard.metrics_addr() {
             println!("metrics on http://{metrics}/metrics");
         }
+        if let Some(kohral) = &kohral {
+            println!("kohral runtime contract on http://{}", kohral.address);
+        }
+        // The API line comes last: it is the marker "the daemon is ready".
         println!("kevin serve listening on http://{local}");
     }
 
@@ -177,6 +191,11 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
 
     api_stop.cancel();
     let _ = tokio::time::timeout(FLUSH_BUDGET, server).await;
+    if let Some(kohral) = kohral {
+        kohral.stop.cancel();
+        let _ = tokio::time::timeout(FLUSH_BUDGET, kohral.server).await;
+        kohral.runtime.shutdown().await;
+    }
     for observer in observers {
         observer.abort();
     }
@@ -230,6 +249,107 @@ async fn shutdown(
 // ---------------------------------------------------------------------------
 // Startup helpers
 // ---------------------------------------------------------------------------
+
+/// Steps 5–8, with the two Kohral steps folded in at the right places.
+///
+/// Ordering is the contract, not a preference: the sweep must see the ledger
+/// **before** `Orchestrator::boot` rebuilds a `RunActor` for a run that was
+/// mid-turn, or the saga resumes work Kohral was promised would never be
+/// replayed (`plan/08-kohral-runtime.md` §1.9, `run_automatic_replay: false`).
+async fn boot(config: &Arc<KevinConfig>, kohral: bool) -> anyhow::Result<EmbeddedRuntime> {
+    if !kohral {
+        return EmbeddedRuntime::start(Arc::clone(config)).await;
+    }
+    let cwd = std::env::current_dir()
+        .map_err(|e| ExitError::new(exit::INVALID_ARGS, format!("current directory: {e}")))?;
+    let backend = Backend::open(Arc::clone(config)).await?;
+
+    let restarted = kevin_kohral::sweep_runtime_restarted(
+        backend.pool(),
+        Arc::clone(backend.store_erased()),
+        Arc::clone(backend.bus_erased()),
+        backend.commands_erased(),
+        backend.clock_erased(),
+        backend.ids_erased(),
+        &config.kevin.instance_name,
+    )
+    .await
+    .map_err(|e| ExitError::new(exit::FAILED, format!("kohral ledger sweep: {e}")))?;
+    if !restarted.is_empty() {
+        tracing::warn!(
+            { fields::EVENT } = events::kohral::RUNTIME_RESTARTED,
+            turns = restarted.len(),
+            "terminalised Kohral turns that did not survive the last restart"
+        );
+    }
+
+    let files = kevin_kohral::briefing::BriefingFiles::from_config(&config.kohral);
+    let briefing = kevin_kohral::briefing::provider(&files);
+    EmbeddedRuntime::boot_on(backend, &cwd, vec![briefing]).await
+}
+
+/// The live Kohral listener.
+struct KohralListener {
+    runtime: kevin_kohral::KohralRuntime,
+    server: tokio::task::JoinHandle<std::io::Result<()>>,
+    stop: CancellationToken,
+    address: SocketAddr,
+}
+
+/// Binds `kohral.bind` with the Hermes-dialect router (`plan/08` §1.1).
+async fn serve_kohral(
+    runtime: &EmbeddedRuntime,
+    config: &Arc<KevinConfig>,
+) -> anyhow::Result<KohralListener> {
+    let token_file = &config.kohral.token_file;
+    let auth = TokenVerifier::from_file(token_file, config.server.token_grace).map_err(|e| {
+        ExitError::new(
+            exit::INVALID_ARGS,
+            format!(
+                "kohral.token_file {}: {e} (Kohral mounts this secret as \
+                 KEVIN_RUNTIME_TOKEN → API_SERVER_KEY)",
+                token_file.display()
+            ),
+        )
+    })?;
+    let backend = runtime.backend();
+    let kohral = kevin_kohral::KohralRuntime::start(kevin_kohral::KohralDeps {
+        handle: runtime.handle_arc(),
+        pool: backend.pool().clone(),
+        store: Arc::clone(backend.store_erased()),
+        bus: Arc::clone(backend.bus_erased()),
+        config: Arc::clone(config),
+        auth: Arc::new(auth),
+        workers: Arc::clone(&runtime.handle().deps().workers),
+        options: kevin_kohral::KohralOptions::from_config(config, crate::VERSION),
+    })
+    .await
+    .map_err(|e| ExitError::new(exit::FAILED, format!("kohral listener: {e}")))?;
+
+    let listener = tokio::net::TcpListener::bind(config.kohral.bind)
+        .await
+        .map_err(|e| {
+            ExitError::new(
+                exit::UNREACHABLE,
+                format!("cannot bind kohral.bind {}: {e}", config.kohral.bind),
+            )
+        })?;
+    let address = listener.local_addr().unwrap_or(config.kohral.bind);
+    let stop = CancellationToken::new();
+    let shutdown = stop.clone();
+    let app = kohral.router();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async move { shutdown.cancelled().await })
+            .await
+    });
+    Ok(KohralListener {
+        runtime: kohral,
+        server,
+        stop,
+        address,
+    })
+}
 
 /// Loads and validates the configuration, applying `--bind`.
 fn load(ctx: &Ctx, bind: Option<&str>) -> anyhow::Result<Resolved> {
