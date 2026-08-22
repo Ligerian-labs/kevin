@@ -97,28 +97,12 @@ fn ac_ws00_2_every_command_has_help() {
 #[test]
 fn ac_ws00_2_stubs_exit_2_not_implemented() {
     let cases: &[&[&str]] = &[
-        &["run", "do the thing"],
         &["serve"],
-        &["runs", "ls"],
-        &["tasks", "show", "01910000-0000-7000-8000-000000000001"],
-        &["questions", "ls"],
-        &[
-            "answer",
-            "01910000-0000-7000-8000-000000000001",
-            "--default",
-        ],
-        &["approve", "01910000-0000-7000-8000-000000000001"],
-        &[
-            "reject",
-            "01910000-0000-7000-8000-000000000001",
-            "--feedback",
-            "no",
-        ],
         // `db` (WS-03), `config show` (WS-02), `workers doctor` (WS-05),
-        // `routes` (WS-09), `lessons`/`memory` (WS-18), `proposals` (WS-19) and
-        // `tui` (WS-17) are implemented.
+        // `routes` (WS-09), `lessons`/`memory` (WS-18), `proposals` (WS-19),
+        // `tui` (WS-17) and `run`/`runs`/`tasks`/`questions`/`answer`/`approve`/
+        // `reject`/`cost` (WS-12) are implemented.
         &["eval", "rerun", "01910000-0000-7000-8000-000000000001"],
-        &["cost", "--group-by", "model"],
         &["kohral", "conformance", "--phase", "basic"],
     ];
     for args in cases {

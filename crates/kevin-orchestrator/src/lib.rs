@@ -23,6 +23,8 @@
 //!   `kevin-workspace` (git worktrees / jj workspaces, `gh` PRs).
 //! - [`role_port`] — the production [`ports::RolesPort`] over WS-10's
 //!   [`roles::RoleRunner`].
+//! - [`evaluator_port`] — the production [`ports::EvaluatorPort`] over WS-19's
+//!   `kevin_evaluator::Evaluator`, drawing its evidence from the projections.
 //! - [`services`] — thin command handlers: load stream → rehydrate → `handle`
 //!   → append with OCC → publish.
 //! - [`scheduler`] — topological ready-set and the concurrency bulkheads.
@@ -36,6 +38,7 @@
 
 pub mod convert;
 pub mod error;
+pub mod evaluator_port;
 pub mod local_workspace;
 pub mod orchestrator;
 pub mod ports;
@@ -49,6 +52,7 @@ pub mod task_runner;
 pub mod testing;
 
 pub use error::AppError;
+pub use evaluator_port::EvaluationRunner;
 pub use local_workspace::LocalWorkspace;
 pub use orchestrator::{Deps, Handle, Orchestrator};
 pub use ports::{EvaluatorPort, MemoryPort, RolesPort, RouterPort};

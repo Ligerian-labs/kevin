@@ -32,12 +32,20 @@ kevin-kohral.workspace = true
 kevin-tui.workspace = true
 
 anyhow.workspace = true
+async-trait.workspace = true
 chrono.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
+comfy-table.workspace = true
+humantime.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
