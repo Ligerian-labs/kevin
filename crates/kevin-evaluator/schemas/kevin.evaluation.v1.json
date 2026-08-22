@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kevin.evaluation.v1",
+  "title": "Judge evaluation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scores", "overall", "verdict", "lessons", "proposals"],
+  "properties": {
+    "scores": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterion", "score", "rationale"],
+        "properties": {
+          "criterion": { "type": "string", "minLength": 1 },
+          "score": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "rationale": { "type": "string", "maxLength": 400 }
+        }
+      }
+    },
+    "overall": { "type": "number", "minimum": 0, "maximum": 1 },
+    "verdict": { "type": "string", "enum": ["accept", "accept_with_fixes", "reject"] },
+    "lessons": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "proposals": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "body", "rationale"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["prompt", "config", "routing"] },
+          "body": { "type": "string", "maxLength": 1500 },
+          "rationale": { "type": "string", "maxLength": 400 }
+        }
+      }
+    }
+  }
+}

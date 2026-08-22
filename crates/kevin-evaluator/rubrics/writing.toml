@@ -1,0 +1,28 @@
+# Built-in rubric: `writing` (plan/06-memory-and-learning.md §3.1).
+id = "writing"
+description = "Rubric for writing tasks."
+
+[[criteria]]
+key = "fit_to_brief"
+weight = 0.35
+description = "The text answers the brief, for the audience it names."
+
+[[criteria]]
+key = "clarity"
+weight = 0.25
+description = "Every sentence carries information a reader could act on."
+
+[[criteria]]
+key = "structure"
+weight = 0.15
+description = "Sections, ordering and length serve the reader."
+
+[[criteria]]
+key = "tone"
+weight = 0.15
+description = "Register matches the brief; no filler, no hype."
+
+[[criteria]]
+key = "efficiency"
+weight = 0.10
+description = "Cost and wall-clock reasonable for the task size."

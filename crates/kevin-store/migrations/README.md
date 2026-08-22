@@ -38,3 +38,4 @@ Current allocation:
 | 0002 | `0002_orch.sql` | `orch` (projections / read models) | WS-11 |
 | 0003 | `0003_routing.sql` | `routing` | WS-09 |
 | 0004 | `0004_memory.sql` | `memory` | WS-18 |
+| 0005 | `0005_eval.sql` | `eval` (evaluations, proposals inbox) | WS-19 |

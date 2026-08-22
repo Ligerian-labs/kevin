@@ -1,0 +1,29 @@
+# Built-in rubric: `default` (plan/06-memory-and-learning.md §3.1).
+# Weights must sum to 1.0 — validated at load.
+id = "default"
+description = "General-purpose rubric used for runs and for task kinds without a specialised rubric."
+
+[[criteria]]
+key = "correctness"
+weight = 0.30
+description = "Output does what the task asked; no factual/logic errors."
+
+[[criteria]]
+key = "completeness"
+weight = 0.25
+description = "Every acceptance criterion is demonstrably met."
+
+[[criteria]]
+key = "quality"
+weight = 0.15
+description = "Clarity, structure, maintainability of the deliverable."
+
+[[criteria]]
+key = "safety"
+weight = 0.15
+description = "No destructive/unsafe actions; secrets untouched; scope respected."
+
+[[criteria]]
+key = "efficiency"
+weight = 0.15
+description = "Cost and wall-clock reasonable for the task size."

@@ -1,0 +1,28 @@
+# Built-in rubric: `research` (plan/06-memory-and-learning.md §3.1).
+id = "research"
+description = "Rubric for research tasks."
+
+[[criteria]]
+key = "accuracy"
+weight = 0.35
+description = "Claims are correct and not overstated."
+
+[[criteria]]
+key = "coverage"
+weight = 0.25
+description = "The question is answered in full, alternatives considered."
+
+[[criteria]]
+key = "sourcing"
+weight = 0.20
+description = "Claims are traceable to a file, command output or citation."
+
+[[criteria]]
+key = "clarity"
+weight = 0.10
+description = "A reader can act on the answer without re-reading it."
+
+[[criteria]]
+key = "efficiency"
+weight = 0.10
+description = "Cost and wall-clock reasonable for the task size."
