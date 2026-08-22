@@ -75,6 +75,8 @@ crates/
   kevin-config        # schema (serde), layered loading, validation, defaults, model catalog defaults
   kevin-store         # sqlx Postgres: event store, outbox, snapshots, projections, migrations, pgvector helpers
   kevin-bus           # EventBus trait; InProcBus (tokio::sync::broadcast); PgNotifyBus (LISTEN/NOTIFY + catch-up from store)
+                      #   one-shot commands and `kevin run` use InProcBus; `kevin serve` uses PgNotifyBus,
+                      #   so a second process (a follower, a TUI, a replica) attaches to the running daemon
   kevin-telemetry     # tracing subscriber, JSON logs, metrics registry, /metrics exporter, correlation ids
   kevin-workspace     # Workspace trait: GitWorktree, JjWorkspace, InPlace; env allow-list; sandbox tier policy
   kevin-worker        # Worker trait + adapters: claude, codex, pi, opencode, fake; subprocess supervisor; JSONL parsers
@@ -94,6 +96,10 @@ Dependency direction (compile-time enforced by `Cargo.toml` and checked by a
 
 - `kevin-domain` depends on nothing internal.
 - `kevin-store`, `kevin-bus`, `kevin-worker`, `kevin-workspace`, `kevin-router`, `kevin-memory` depend on `kevin-domain` (+ `kevin-config`, `kevin-telemetry`).
+- `kevin-store` additionally depends on `kevin-bus`, for the one trait it
+  implements: `PgEventStore` **is** the bus' `EventSource`. Without that edge
+  `PgNotifyBus` has nothing to read events back from, and the runtime is
+  single-process by construction. The edge never points the other way.
 - `kevin-evaluator` depends on `kevin-worker`, `kevin-router`, `kevin-memory`.
 - `kevin-orchestrator` depends on everything above; nothing above depends on it.
 - `kevin-api` depends on `kevin-orchestrator`; `kevin-kohral` depends on `kevin-api` + `kevin-orchestrator`.

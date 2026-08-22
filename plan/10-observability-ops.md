@@ -158,7 +158,11 @@ Shutdown (SIGTERM/SIGINT, `kevin.shutdown.*`):
 3. After grace: cancel tokens → SIGTERM → `workers.kill_grace` (10 s) → SIGKILL process groups;
    record `task.attempt_failed { class: Transient, message: "runtime_shutdown" }`.
 4. Flush outbox relay, projections checkpoints, telemetry (bounded 5 s).
-5. Close pool; exit 0 (or 1 if forced).
+5. Stop the event bus, **then** close the pool. Order matters: `PgNotifyBus`
+   holds a `LISTEN` connection for as long as its pump runs and
+   `PgPool::close()` waits for every connection to be returned, so closing the
+   pool first hangs the shutdown forever (`PgNotifyBus::shutdown`,
+   `Backend::close`). Exit 0 (or 1 if forced).
 A second signal forces immediate step 3.
 
 ## Migrations and data
@@ -199,6 +203,7 @@ A second signal forces immediate step 3.
 | Token compromised | API logs `auth_failed` spikes | `kevin config rotate-token`; `SIGHUP`; update clients | old token → 401 |
 | Upgrading Kevin | read release notes; `kevin db status` | drain → stop → replace binary/image → `kevin db migrate` (if not auto) → start | `readyz`; smoke run with fake worker |
 | Kohral `runtime_restarted` failures | `kevin_kohral_turns_total{outcome="runtime_restarted"}` | expected after crash/redeploy; Kohral retries as a new turn; investigate crash cause in logs | no new occurrences |
+| `kevin serve` will not exit on SIGTERM | last log line is `kevin.shutdown.drained` or nothing after it; the process is idle | a second signal forces the cancel path; if it hangs *after* the drain line, something holds a pool connection (the bus' `LISTEN`, a stray listener) — capture a stack dump before `SIGKILL` | the process exits 0 within `shutdown_grace_period` + 5 s |
 | Memory growth / embeddings slow | `kevin_memory_items`, `kevin_embedding_duration_seconds` | `kevin memory forget --all-before`, lower `memory.top_k`, raise `concurrency.blocking_threads` | latency histograms back in range |
 
 Alerting (suggested, owner = operator): page on `readyz` failing > 5 min,
