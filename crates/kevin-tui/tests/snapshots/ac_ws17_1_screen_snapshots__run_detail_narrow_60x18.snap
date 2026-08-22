@@ -1,0 +1,22 @@
+---
+source: crates/kevin-tui/tests/ac_ws17_1_screen_snapshots.rs
+expression: "render(&model, 60, 18)"
+---
+" 1 Runs │ 2 Run │ 3 Inbox │ 4 Routes │ 5 Lessons │ 6 Workers"
+"┌▌Transcript · Add /healthz ───────────────────────────────┐"
+"│12:00:01 assistant    line 1                              │"
+"│12:00:02 assistant    line 2                              │"
+"│12:00:03 tool_call    line 3                              │"
+"│12:00:04 assistant    line 4                              │"
+"│12:00:05 assistant    line 5                              │"
+"│12:00:06 tool_call    line 6                              │"
+"│                                                          │"
+"│                                                          │"
+"│                                                          │"
+"│                                                          │"
+"└ follow ON · 6/5000 lines ────────────────────────────────┘"
+"┌ 0191f3a1 · executing ────────────────────────────────────┐"
+"│$0.42 / $5.00 · 12.3k in / 3400 out tokens · 2 tasks · to…│"
+"│budget   8% ─────────────────wall   1% ───────────────────│"
+"└ a approve · x reject · q inbox · y yank ─────────────────┘"
+"http://127.0.0.1:7777/ · 2 open question(s) · h help · 1..6…"
