@@ -612,6 +612,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "comfy-table"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "136c8c4c3823846e8ba6d4bda011b4e5d5827b8bb0ac26c31f9ab31abe9f54f2"
+dependencies = [
+ "crossterm",
+ "unicode-segmentation",
+ "unicode-width",
+]
+
+[[package]]
 name = "compact_str"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2175,9 +2186,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "async-trait",
  "chrono",
  "clap",
  "clap_complete",
+ "comfy-table",
+ "humantime",
  "kevin-api",
  "kevin-bus",
  "kevin-config",
@@ -2194,12 +2208,16 @@ dependencies = [
  "kevin-worker",
  "kevin-workspace",
  "predicates",
+ "rust_decimal",
+ "serde",
  "serde_json",
  "sqlx",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-util",
  "toml",
+ "tracing",
  "uuid",
 ]
 

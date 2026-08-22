@@ -15,6 +15,8 @@ use clap::{Args as _, FromArgMatches as _};
 
 pub mod cmd;
 pub mod ctx;
+pub mod embedded;
+pub mod render;
 pub mod version;
 
 pub use ctx::{Ctx, ExitError, GlobalArgs, exit, not_implemented};
