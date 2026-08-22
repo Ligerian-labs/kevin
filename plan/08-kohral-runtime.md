@@ -190,10 +190,13 @@ Derived from `[models.*]`: provider id = alias `provider` key when present
 `doctor()` reports authenticated are listed (Hermes lists authenticated
 providers only). `capabilities` contains `"reasoning"` for tiers
 `frontier|balanced`; Kohral adds `"tools"` itself. `name` is optional for
-Kohral (`ModelCatalog.php` reads `id`, `name`, `capabilities`) — `[inferred —
-verify]` that Kohral does not reject extra keys. Reverse mapping for
-`POST /v1/runs.model = "<provider>/<model>"` → first alias with that
-`(provider, model)`.
+Kohral. **Verified** against `ModelCatalog::fetchRuntimeCatalog`: it validates
+the envelope (`object`, `version == 1`, `providers` a list) and then reads only
+`id`, `name` and `capabilities` per model row — extra keys are ignored, not
+rejected, and a capability outside `reasoning|vision` is silently dropped.
+Reverse mapping for `POST /v1/runs.model = "<provider>/<model>"` → first alias
+with that `(provider, model)`; `KevinRuntimeStrategy::MODEL_ALIASES` keeps the
+same first-alias-wins index on the Kohral side for the guided model fields.
 
 ### 1.6 Session resources
 
@@ -216,9 +219,12 @@ duplicates. Source: `kohral.runs_ledger` + `kohral.session_messages` (§2).
 
 `POST /v1/maintenance/drain` sets `draining=true` (new keys → 503
 `gateway_draining`, existing keys still resolve), `GET` reports, `DELETE`
-clears. Payload `{"draining": bool, "accepting": bool, "active_runs": n}`
-(`accepting = !draining`; field names `[inferred — verify]` against
-`HermesRuntimeStrategy::parseDrainState`). Drain also flips `/health/detailed`
+clears. Payload
+`{"accepting": bool, "activeWork": int, "draining": bool, "active_runs": int}`.
+`HermesRuntimeStrategy::parseDrainState` requires the **camelCase** pair
+`accepting` (bool) and `activeWork` (int) and throws `runtime_protocol_error`
+without them; `draining` / `active_runs` are `snake_case` aliases Kevin emits for
+its own operators. `accepting = !draining`. Drain also flips `/health/detailed`
 → `"drainable": true` and the orchestrator's admission gate (05-orchestration).
 
 ### 1.8 Temporary attachments
@@ -346,11 +352,18 @@ Volume layout inside the `kevin-gateway` container:
 | Path | Mount | Content |
 |---|---|---|
 | `/opt/kevin/config/` | read-only config files from `configFiles()` | `kevin.toml` (operator overlay, §5.2), `AGENTS.md` (mission from anamnesis role), `SOUL.md` (persona + Kohral's `## Kohral` section), `KOHRAL_DOCUMENTATION.md` |
-| `/opt/kevin/data/` | persistent volume `data` | `memories/MEMORY.md` (seeded once by entrypoint if absent), worker transcripts, artifacts, workspaces (`/opt/kevin/data/work/<run>`), fastembed model cache |
-| `/run/secrets/kohral-runtime-token` | secret | bearer token (`API_SERVER_KEY`) |
-| `/run/secrets/kevin-env` | secret env file | provider keys for the CLIs (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) sourced by the entrypoint; never logged |
-| `/run/secrets/postgres-password` | secret | DB password; entrypoint composes `KEVIN__DATABASE__URL` |
+| `/opt/kevin/data/` | persistent volume `data` | `MEMORY.md` (`kohral.memory_file`, at the volume **root**, seeded once when absent), worker transcripts, artifacts, workspaces (`/opt/kevin/data/work/<run>`), `api-token`, fastembed model cache |
+| `/run/secrets/kohral-runtime-token` | secret | bearer token (`API_SERVER_KEY`), path in `KOHRAL_RUNTIME_TOKEN_FILE` |
+| `/run/secrets/kevin-env` | secret env file | provider keys for the CLIs (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) sourced by the start command; never logged |
+| `/run/secrets/kevin-database-url` | secret | the whole `postgres://kevin:…@memory:5432/kevin` URL, read through `KEVIN__DATABASE__URL_FILE` so the password never enters the environment |
+| `/run/secrets/postgres-password` | secret | DB password — the *hand-run* stack's path, where `entrypoint.sh` composes `KEVIN__DATABASE__URL` itself |
 | `/run/secrets/kohral-agent-identity` | secret | collaboration identity (phase 2) |
+
+`kohral.memory_file` defaults to `/opt/kevin/data/MEMORY.md` in
+`kevin-config`. Kohral does **not** configure it — `kohral` is a protected
+section, so the strategy hardcodes the same path in its own `MEMORY_PATH`
+constant. The two would silently diverge if Kevin changed the default;
+`KohralPlatformBriefingTest` pins the Kohral half.
 
 ### 5.1 Briefing injection
 
@@ -362,53 +375,128 @@ a one-line pointer to `KOHRAL_DOCUMENTATION.md` (never the whole file), then
 the per-turn `instructions`. Kohral scans these files for prompt-injection
 patterns and replaces a whole file with `[BLOCKED: …]` — Kevin must therefore
 treat a `[BLOCKED` file as *missing* and log a warning, not feed it to models.
-Entrypoint seeds `/opt/kevin/data/memories/MEMORY.md` with the documentation
-pointer only when absent (same reasoning as Hermes: the file belongs to the
-agent).
+
+`/opt/kevin/data/MEMORY.md` is seeded with the documentation pointer only when
+absent (same reasoning as Hermes: the file belongs to the agent). **The
+strategy owns this on the Kohral path**, not the image: `KevinRuntimeStrategy`
+gives the gateway `entrypoint = ['/bin/sh','-c']` and a command shaped
+
+```sh
+[ -e '/opt/kevin/data/MEMORY.md' ] || { mkdir -p '/opt/kevin/data' && printf '%s\n' '<seed>' >'/opt/kevin/data/MEMORY.md'; } 2>/dev/null; \
+  set -e; test -r '/run/secrets/kevin-env'; set -a; . '/run/secrets/kevin-env'; set +a; exec kevin serve --kohral
+```
+
+which **replaces** the image's `ENTRYPOINT`, so `deploy/kohral/entrypoint.sh`
+never runs on a Kohral rollout (§6). The seed text is
+`KohralPlatformBriefing::memorySeed()` and
+`KohralPlatformBriefingTest::itSeedsTheMemoryPointerWithoutTakingOverTheAgentsMemoryFile`
+asserts the strategy emits it (and that MEMORY.md is *not* a mounted config
+file). The logic is therefore deliberately duplicated in `entrypoint.sh` for
+hand-run and conformance stacks; both copies must stay idempotent.
 
 ### 5.2 Native configuration overlay
 
 The agent's "native runtime configuration" (Kohral advanced JSON editor) is a
-JSON object that Kevin deep-merges as a TOML fragment over its defaults.
-Guided fields (§7) write into it. Protected sections that the overlay may not
-touch (validated by `kevin config validate --overlay`; Kohral's
-`validateConfiguration()` mirrors the list): `server`, `kohral`, `database`,
-`sandbox`, `workers.*.bin`, `workers.*.env_passthrough`, `telemetry`. Allowed:
-`kevin.auto_approve_plans` (forced true anyway), `budget.*`, `models.*`,
-`roles.*`, `routing.*`, `memory.*`, `evaluation.*`, `workspace.*`,
-`concurrency.*`. Unknown keys are rejected (deny_unknown_fields) so Kohral
-surfaces the error at rollout time.
+JSON object the strategy deep-merges over the guided defaults and renders as the
+`kevin.toml` config file (§5); guided fields (§7) write into the same object.
+
+Validation is **entirely Kohral-side**, in `validateConfiguration()`, and it is
+much narrower than this section originally claimed:
+
+1. `RuntimeConfiguration::assertSafe($c, PROTECTED_SECTIONS)` — rejects the
+   *top-level* sections Kohral owns: `server`, `kohral`, `database`, `sandbox`,
+   `workers`, `telemetry`. `assertSafe` intersects `PROTECTED_SECTIONS` with
+   `array_keys($configuration)`, so it only ever sees top-level keys: a dotted
+   path like `workers.*.bin` would never match and the whole `workers` section
+   has to be protected instead. It also refuses any `*key*`/`*password*`/
+   `*secret*`/`*token*`/`*credential*` leaf that is not a `${ENV_VAR}` reference.
+2. `RuntimeConfiguration::assertKnownFields($c, fields)` — rejects **every leaf
+   path that is not one of the five guided fields**, and type-checks the ones
+   that are (`text` non-empty, `integer ≥ min`, `select` ∈ `options`).
+
+So the accepted overlay is exactly `roles.planner`, `roles.default`,
+`roles.effort.planner`, `budget.default_run_usd`, `budget.max_parallel_tasks` —
+**not** the wide `budget.*` / `models.*` / `routing.*` / `memory.*` allow-list
+this section used to promise. Widening it means adding guided fields in the
+strategy (a Kohral PR), not relaxing anything in Kevin.
+
+There is **no** `kevin config validate --overlay`: `kevin config` has exactly
+`init`, `show`, `validate` and `rotate-token`, none of which takes an overlay.
+Kevin also has no protected-section guard of its own — an overlay that reached
+`sandbox` would simply be applied. That gap is tracked in
+[09 §Security checklist](./09-security.md); whoever adds the overlay on the
+Kevin side must add the guard in the same PR. Unknown keys that survive Kohral
+are still rejected by Kevin's `deny_unknown_fields` at boot — which surfaces as
+a crash-looping rollout, not a form error, hence Kohral's own
+`FLOAT_PATHS` fix-up that emits `budget.default_run_usd` as `10.0`, not `10`.
 
 ## 6. Image and stack
 
 `deploy/kohral/Dockerfile` (multi-stage):
 
-1. `FROM rust:1.8x-bookworm AS build` `[inferred — verify current stable]` →
-   `cargo build --release -p kevin-cli` with `--locked`; strip.
-2. `FROM debian:bookworm-slim` (not distroless: the CLIs need node, bash, git,
-   ssh-client, ca-certificates, python3 for codex hooks): install
-   `git`, `bash`, `curl`, `ca-certificates`, `openssh-client`, `jq`,
-   Node 24 (pinned tarball + sha256 `[inferred — verify]`), then
-   `npm install -g @anthropic-ai/claude-code@<pin> @openai/codex@<pin> opencode-ai@<pin> @mariozechner/pi-coding-agent@<pin>` `[inferred — verify package names/pins; codex may prefer its release binary]`; record every pin + digest in `deploy/kohral/upstreams.lock.json` and verify in CI (same discipline as Kohral `runtime/upstreams.lock.json`).
-3. Non-root user `kevin` (uid 10000, matching Kohral's volume ownership
+1. `FROM --platform=$BUILDPLATFORM rust:1-trixie AS builder` →
+   `cargo build --locked --release -p kevin-cli --bin kevin` with
+   `-C strip=symbols`. The builder always runs on the *build* platform and
+   cross-compiles, so an arm64 image never compiles the workspace under QEMU.
+2. `FROM debian:trixie-slim` (not distroless: the CLIs need node, bash, git,
+   ssh-client, ca-certificates, python3 for codex hooks; **trixie, not
+   bookworm**: fastembed statically links the prebuilt ONNX Runtime, which
+   references libstdc++ symbols bookworm's GCC 12 does not export): install
+   `bash`, `ca-certificates`, `curl`, `git`, `jq`, `less`, `openssh-client`,
+   `python3`, `ripgrep`, `xz-utils`, Node 24 (pinned tarball + sha256), then
+   `npm install --global --save-exact @anthropic-ai/claude-code@<pin> @openai/codex@<pin> opencode-ai@<pin> @earendil-works/pi-coding-agent@<pin>`
+   — pi's package is `@earendil-works/pi-coding-agent`; `@mariozechner/pi-coding-agent`
+   is the old name and stopped at 0.73.1. This stage is target-native on purpose:
+   `npm install -g` resolves the per-architecture optional dependency that
+   carries codex' Rust binary and opencode's Bun one. Record every pin + digest
+   in `deploy/kohral/upstreams.lock.json` and verify in CI (same discipline as
+   Kohral `runtime/upstreams.lock.json`).
+3. A `models` stage bakes the fastembed cache for `BAAI/bge-small-en-v1.5` at a
+   pinned Hugging Face revision with per-file sha256 verification, so a fresh
+   agent does not spend its first turn downloading 130 MB
+   (`ARG BAKE_EMBEDDING_MODEL=1` turns it off).
+4. Non-root user `kevin` (uid 10000, matching Kohral's volume ownership
    convention `VolumeSpec('data', …, 10000, 10000)`), `HOME=/opt/kevin/data/home`
    so CLI state (`~/.claude`, `~/.codex`, `~/.pi`, `~/.config/opencode`) lands on
    the persistent volume.
-4. `COPY --from=build /kevin /usr/local/bin/kevin`; `COPY deploy/kohral/entrypoint.sh`.
-5. `EXPOSE 8080`; `HEALTHCHECK CMD curl -fsS http://127.0.0.1:8080/health`.
+5. `COPY --from=builder /usr/local/bin/kevin /usr/local/bin/kevin`;
+   `COPY deploy/kohral/entrypoint.sh`.
+6. Image environment — what only the *image* may decide, so it is not in the
+   operator overlay: `KEVIN__KEVIN__PROFILE=kohral`,
+   `KEVIN__KOHRAL__BIND=0.0.0.0:8080`, `KEVIN__SANDBOX__TIER=container`,
+   `KEVIN__WORKSPACE__STRATEGY=in_place`, `KEVIN__WORKSPACE__INTEGRATION=none`,
+   and **`KEVIN__DATABASE__AUTO_MIGRATE=true`** — migrations must still happen on
+   the Kohral start-command path, which never runs `entrypoint.sh` (see below).
+7. `EXPOSE 8080`; `HEALTHCHECK CMD curl -fsS http://127.0.0.1:8080/health`.
+   Podman's default OCI image format *drops* `HEALTHCHECK` (it warns at build
+   time), so both Compose files declare the same probe; `--format docker` bakes
+   it in.
 
-`entrypoint.sh`: `set -eu`; source `/run/secrets/kevin-env` if present; build
-`KEVIN__DATABASE__URL` from `POSTGRES_*` + password file; `kevin db migrate`
-(retry until the `postgres` service is ready); seed MEMORY.md; `exec kevin serve
+`entrypoint.sh` (`set -eu`, POSIX sh): source `/run/secrets/kevin-env` if
+present; resolve the database — `KEVIN__DATABASE__URL_FILE` / the
+`kevin-database-url` secret first, then `KEVIN__DATABASE__URL`, then
+`POSTGRES_*` + password file; fail fast when the bearer token or the database is
+missing; **mint the operator API token** into
+`server.auth_token_file` (`/opt/kevin/data/api-token`) if absent — Kohral
+provisions the *runtime* token only, and the operator API never shares it;
+seed the fastembed cache onto the volume; `kevin db migrate` (retry until the
+`memory` service is ready); seed MEMORY.md when absent; `exec kevin serve
 --kohral` (which performs the `runtime_restarted` sweep before binding).
+
+This entrypoint is what a hand-run stack and the conformance job get. It is
+**not** the production path: `KevinRuntimeStrategy` gives the gateway service its
+own `/bin/sh -c "<seed MEMORY.md>; exec kevin serve --kohral"` command, which
+replaces it (§5, §7). Everything the entrypoint does is therefore idempotent
+with, and skippable by, that command.
 
 Stack emitted by the strategy (`WorkloadSpec`): services `gateway` (image
 `<registry>/kevin@sha256:…`, port 8080, depends on `memory`, cpu 1 / mem 2G,
-volumes `data`, config files §5, secrets §5) and `memory` (`pgvector/pgvector:pg17`
-digest-pinned `[inferred — verify]`, `POSTGRES_USER=kevin`,
-`POSTGRES_DB=kevin`, `POSTGRES_PASSWORD_FILE`, volume `memory-data`, healthcheck
-`pg_isready`). One isolated stack per agent (Podman Compose project / k8s
-namespace / Swarm stack), exactly like Hermes.
+volumes `data`, config files §5, secrets §5) and `memory`
+(`pgvector/pgvector:pg16` digest-pinned — **pg16, not pg17**: Kevin's migrations
+and CI both run Postgres 16 + pgvector, so the stack matches CI —
+`POSTGRES_USER=kevin`, `POSTGRES_DB=kevin`, `POSTGRES_PASSWORD_FILE`, volume
+`memory-data`, healthcheck `pg_isready`). One isolated stack per agent (Podman
+Compose project / k8s namespace / Swarm stack), exactly like Hermes.
 
 Sandbox tier in this image is `container`: the stack *is* the isolation
 boundary (restricted namespace/network policy, no engine socket, egress proxy),
@@ -425,52 +513,86 @@ Steps from Kohral `docs/07` "Adding a runtime later": implement the strategy,
 register it in `RuntimeRegistry` (compiler pass), add a client picker entry,
 no domain changes.
 
+`AgentRuntimeStrategy` is only the base interface; the durable-run surface is
+split across **opt-in interfaces**, and `ModelAwareRuntime` is not optional in
+practice — `Provisioner` throws `\DomainException('Runtime does not expose its
+applied model.')` for a strategy that does not implement it, so a rollout of a
+non-model-aware runtime cannot succeed.
+
 ```php
-final class KevinRuntimeStrategy implements AgentRuntimeStrategy
+final readonly class KevinRuntimeStrategy implements
+    AgentRuntimeStrategy,          // type, label, image, validateConfiguration, configurationGuide,
+                                   // configFiles, secretBindings, credentialRequirements, buildSpec,
+                                   // supportedModes, supportedChannels, channelSecretKeys,
+                                   // channelDescriptor, configureChannel, channelStatus,
+                                   // health, sessions, session, prepareConversationModel,
+                                   // chatRequest, metrics
+    ModelAwareRuntime,             // configuredModel, defaultModel, withDefaultModel,
+                                   // modelCredentialKeys, supportsModelProvider, canonicalProvider
+    NativeConversationRuntime,     // conversationCompatibility, submitTurn, turnStatus, interruptTurn
+    DrainAwareRuntime,             // beginDrain, drainState, cancelDrain
+    TemporaryAttachmentRuntime     // uploadTemporaryAttachment, deleteTemporaryAttachment
 {
+    use HermesStyleDurableRunClient;   // the trait §7 recommended: it now exists and is
+                                       // shared by the Hermes, OpenClaw and Kevin strategies
+
     public function type(): string { return 'kevin'; }
     public function label(): string { return 'Kevin'; }
-    public function supportedModes(): array { return ['flex', 'live_standard', 'live_plus']; }
-    public function image(string $version): string { /* digest from image-lock */ }
-    public function validateConfiguration(array $c): void { RuntimeConfiguration::assertSafe($c, ['server','kohral','database','sandbox','telemetry']); }
+
+    // Live Standard is 2 GB for the whole agent; Kevin's gateway alone is sized
+    // at 2 GB before its Postgres service and the CLI subprocesses it forks.
+    public function supportedModes(): array { return ['flex', 'live_plus']; }
+
+    // Top-level only — `assertSafe` intersects this with array_keys($c), so it is
+    // `workers`, never `workers.*.bin` (§5.2).
+    private const PROTECTED_SECTIONS = ['server','kohral','database','sandbox','workers','telemetry'];
+    public function validateConfiguration(array $c): void {
+        RuntimeConfiguration::assertSafe($c, self::PROTECTED_SECTIONS);
+        RuntimeConfiguration::assertKnownFields($c, $this->configurationGuide()['fields']);
+    }
+
+    // Every field needs `description` and `placeholder`; the two model fields are
+    // `select`s over MODEL_ALIASES, because assertKnownFields validates a select
+    // against its `options` and Kohral's picker speaks canonical `provider/model`.
     public function configurationGuide(): array { return [
         'documentationUrl' => 'https://github.com/Ligerian-labs/kevin/blob/main/plan/03-config-schema.md',
-        'protectedSections' => ['server','kohral','database','sandbox','telemetry'],
-        'example' => ['budget' => ['default_run_usd' => 10], 'roles' => ['planner' => 'opus5-claude']],
+        'protectedSections' => self::PROTECTED_SECTIONS,
+        'example' => ['budget' => ['default_run_usd' => 25, 'max_parallel_tasks' => 6], 'roles' => ['planner' => 'fable5-claude']],
         'fields' => [
-            ['id' => 'primary-model', 'path' => ['roles','planner'], 'label' => 'Planner model alias', 'input' => 'text', 'defaultValue' => 'opus5-claude', 'managed' => true, …],
-            ['id' => 'default-model', 'path' => ['roles','default'], 'label' => 'Default worker model alias', 'input' => 'text', 'defaultValue' => 'sonnet5-claude', …],
-            ['id' => 'effort', 'path' => ['roles','effort','planner'], 'label' => 'Planner effort', 'input' => 'select', 'options' => ['low','medium','high','xhigh','max'], 'defaultValue' => 'xhigh', …],
-            ['id' => 'run-budget', 'path' => ['budget','default_run_usd'], 'label' => 'Budget per turn (USD)', 'input' => 'integer', 'defaultValue' => 10, 'min' => 1, …],
-            ['id' => 'parallel', 'path' => ['budget','max_parallel_tasks'], 'label' => 'Parallel tasks', 'input' => 'integer', 'defaultValue' => 4, 'min' => 1, …],
+            ['id' => 'primary-model',  'path' => ['roles','planner'],           'input' => 'select',  'options' => $aliases, 'defaultValue' => 'opus5-claude',   'managed' => true, 'description' => …, 'placeholder' => '', 'min' => null],
+            ['id' => 'default-model',  'path' => ['roles','default'],           'input' => 'select',  'options' => $aliases, 'defaultValue' => 'sonnet5-claude', 'description' => …, 'placeholder' => '', 'min' => null],
+            ['id' => 'planner-effort', 'path' => ['roles','effort','planner'],  'input' => 'select',  'options' => ['low','medium','high','xhigh','max'], 'defaultValue' => 'xhigh', …],
+            ['id' => 'run-budget',     'path' => ['budget','default_run_usd'],  'input' => 'integer', 'defaultValue' => 10, 'min' => 1, 'placeholder' => '10', …],
+            ['id' => 'parallel-tasks', 'path' => ['budget','max_parallel_tasks'],'input' => 'integer', 'defaultValue' => 4, 'min' => 1, 'placeholder' => '4', …],
         ]]; }
+
     public function configFiles(Anamnesis $a, string $agentName = '', string $user = ''): array {
-        // '/opt/kevin/config/kevin.toml' (overlay → TOML), '/opt/kevin/config/AGENTS.md' (mission),
+        // '/opt/kevin/config/kevin.toml' (guided defaults ⊕ overlay → TOML),
+        // '/opt/kevin/config/AGENTS.md' (mission + credential notice),
         // '/opt/kevin/config/SOUL.md' ($briefing->append(...)), '/opt/kevin/config/KOHRAL_DOCUMENTATION.md'
+        // MEMORY.md is deliberately NOT here: it is seeded by the start command (§5.1).
     }
     public function secretBindings(): array { return ['KEVIN_RUNTIME_TOKEN' => 'API_SERVER_KEY', 'KEVIN_POSTGRES_PASSWORD' => 'POSTGRES_PASSWORD']; }
-    public function credentialRequirements(): array { /* token, pg password, ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN | OPENAI_API_KEY (oneOfGroup model-provider) */ }
-    public function buildSpec(...): WorkloadSpec { /* gateway + memory services as in §6 */ }
+    public function credentialRequirements(): array { /* token, pg password, ANTHROPIC_API_KEY | CLAUDE_CODE_OAUTH_TOKEN | OPENAI_API_KEY (oneOfGroup 'model-provider') */ }
+    public function buildSpec(...): WorkloadSpec { /* gateway + memory as in §6; also mints the
+        `kevin-database-url` secret and sets the §5.1 start command */ }
     public function supportedChannels(): array { return []; }          // Kevin has no channels in v1
-    public function channelSecretKeys(string $c): array { return []; }
     public function channelDescriptor(string $c): array { throw new \DomainException('Kevin has no channels.'); }
-    public function configureChannel(WorkloadSpec $s, ChannelConfiguration $c): WorkloadSpec { throw new \DomainException('Kevin has no channels.'); }
-    public function channelStatus(...): array { return ['status' => 'unsupported', 'detail' => '']; }
-    public function health(string $endpoint): array { return $this->telemetry->health(rtrim($endpoint,'/').'/health'); }
-    public function sessions(...): array { /* GET /api/sessions (+ /messages) */ }
+    public function health(string $endpoint): array { /* GET /health */ }
+    public function sessions(...): array { /* GET /api/sessions */ }
     public function session(...): ?array { /* GET /api/sessions/{id}/messages */ }
-    public function prepareConversationModel(...): void {}
     public function chatRequest(...): RuntimeChatRequest { throw new \DomainException('Kevin only supports the durable run contract.'); }
-    public function conversationCompatibility(...): RuntimeConversationCompatibility { /* same checks as Hermes */ }
-    public function submitTurn(...)/turnStatus(...)/interruptTurn(...)/beginDrain/drainState/cancelDrain { /* identical to HermesRuntimeStrategy */ }
     public function metrics(...): array { /* GET /health/detailed → numeric */ }
 }
 ```
 
-Because `submitTurn/turnStatus/interruptTurn/drain*` are byte-identical to the
-Hermes implementation, the recommended Kohral refactor is to extract a
-`HermesStyleDurableRunClient` trait shared by both strategies (Kohral-side
-decision; flag `[inferred — verify]` with Kohral maintainers).
+Two Kohral-side generalisations landed with the strategy rather than being
+copied: `HermesStyleDurableRunClient` (the trait this section recommended —
+`submitTurn/turnStatus/interruptTurn/drain*`/attachments are shared verbatim by
+Hermes, OpenClaw and Kevin), and the hardcoded `'hermes' requires Live Plus`
+billing checks, now `PricingCatalog::requiresLivePlus($runtime)` over
+`LIVE_PLUS_ONLY = ['hermes','kevin']` and consulted by `BillingService`,
+`UnmeteredCommercialAccess` and `BillingCapacityProfileProvider`.
 
 ## 8. Conformance
 
@@ -495,14 +617,14 @@ digest (Kohral consumes digests only).
 
 ## Deliverables checklist (maps to workstreams)
 
-- [ ] `kevin-kohral` router mounted by `kevin serve --kohral` with every endpoint in §1.1 and the exact capabilities/catalog payloads.
-- [ ] `kohral.runs_ledger`, `kohral.session_messages` migrations + `KohralLedgerProjection` + `runtime_restarted` boot sweep.
-- [ ] Kohral-mode run behaviour: defaults for questions, assumptions section, auto-approve.
-- [ ] Fake-worker conformance hooks behind the conformance profile.
-- [ ] `deploy/kohral/{Dockerfile,entrypoint.sh,compose.conformance.yaml,conformance.toml,upstreams.lock.json}`.
-- [ ] `kevin kohral conformance` + CI job.
-- [ ] Phase 2: collaboration client, request ledger, `kevin mcp collaboration`.
-- [ ] Kohral PR: `KevinRuntimeStrategy`, registry entry, client picker, image-lock entry.
+- [x] `kevin-kohral` router mounted by `kevin serve --kohral` with every endpoint in §1.1 and the exact capabilities/catalog payloads. (WS-22, #30)
+- [x] `kohral.runs_ledger`, `kohral.session_messages` migrations + `KohralLedgerProjection` + `runtime_restarted` boot sweep. (WS-22, #30)
+- [x] Kohral-mode run behaviour: defaults for questions, assumptions section, auto-approve. (WS-22, #30)
+- [x] Fake-worker conformance hooks behind the conformance profile. (WS-05/WS-22)
+- [x] `deploy/kohral/{Dockerfile,entrypoint.sh,compose.yml,compose.conformance.yaml,conformance.toml,upstreams.lock.json}`. (WS-23, #31)
+- [x] `kevin kohral conformance` + CI job (`.github/workflows/kohral-conformance.yml`). (WS-22/WS-23)
+- [ ] Phase 2: collaboration client, request ledger, `kevin mcp collaboration`. **Not shipped** — deferred to post-v1 ([13](./13-roadmap.md)); only `kohral.collaboration_url` exists in the config.
+- [x] Kohral PR: `KevinRuntimeStrategy`, registry entry, client picker, image-lock entry. (WS-24, `Ligerian-labs/kohral` #61)
 
 ---
 Summary: Endpoints — `/health`, `/v1/health`, `/health/detailed`, `/v1/capabilities`, `/v1/kohral/models`, `POST /v1/runs`, `GET /v1/runs/{id}`, `POST /v1/runs/{id}/stop`, `/api/sessions[/{id}[/messages]]`, `/v1/maintenance/drain`, `/v1/attachments/...`. Tables — `kohral.runs_ledger`, `kohral.session_messages`, (phase 2) `kohral.collaboration_requests`. Behaviours — Idempotency-Key acceptance in one tx, canonical request hash, append-only `partial_output` + monotonic `seq`, `runtime_restarted` sweep at boot, no replay, drain, fake-worker conformance hooks, Kohral-mode default answers, `KevinRuntimeStrategy` on the Kohral side.
