@@ -1,0 +1,80 @@
+{
+  "$comment": [
+    "Everything the Kohral runtime image pulls from outside this repository, pinned.",
+    "Same discipline as Kohral's own runtime/upstreams.lock.json: one entry is updated",
+    "per Kevin release, never on an unattended schedule, and `deploy/kohral/Dockerfile`",
+    "verifies the digest at build time. See deploy/kohral/README.md, 'Pins and updates'.",
+    "plan/09-security.md: worker CLIs in the container image are installed at pinned",
+    "versions with checksum verification."
+  ],
+  "base_images": {
+    "builder": {
+      "reference": "docker.io/library/rust:1-trixie",
+      "note": "Build platform only; cross-compiles to the target. Not digest-pinned because the release workflow records the resulting image digest and the binary is built --locked from Cargo.lock. [inferred — verify] whether Kohral requires digest pins on build stages too."
+    },
+    "runtime": {
+      "reference": "docker.io/library/debian:trixie-slim",
+      "note": "Trixie, not bookworm: fastembed's prebuilt ONNX Runtime needs libstdc++ symbols bookworm's GCC 12 does not export."
+    },
+    "memory": {
+      "reference": "docker.io/pgvector/pgvector:pg16",
+      "note": "The stack's Postgres. plan/08 §6 says pg17 [inferred — verify]; Kevin's migrations and CI both run Postgres 16 + pgvector, so the stack matches CI. Kohral's provisioner pins this by digest at rollout."
+    }
+  },
+  "node": {
+    "version": "24.19.0",
+    "release": "https://nodejs.org/dist/v24.19.0/",
+    "artifacts": {
+      "linux-x64": {
+        "file": "node-v24.19.0-linux-x64.tar.xz",
+        "sha256": "14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647"
+      },
+      "linux-arm64": {
+        "file": "node-v24.19.0-linux-arm64.tar.xz",
+        "sha256": "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc"
+      }
+    },
+    "note": "Checksums copied from https://nodejs.org/dist/v24.19.0/SHASUMS256.txt (fetched 2026-08-22). Node 24 is the current LTS line ('Krypton')."
+  },
+  "agent_clis": {
+    "$comment": "Versions are the ones Kevin's worker adapters were written and tested against (plan/04-workers.md); `npm install --save-exact` installs exactly these. Integrity is the npm registry's dist.integrity for that exact version.",
+    "claude": {
+      "package": "@anthropic-ai/claude-code",
+      "version": "2.1.240",
+      "integrity": "sha512-0ivyKRUk9et03PlsZTxwb+LobqW3oGUstvdTnFNcRFATOmp/uyiO6ApVc4XDvg6eQoY6uG8j+kOeNd68BsfeoQ==",
+      "bin": "claude"
+    },
+    "codex": {
+      "package": "@openai/codex",
+      "version": "0.149.0",
+      "integrity": "sha512-i4dryj2Y1j+00Mb5n+0n71EYnTK9/KDc2cdFo/dXD0d1oTog2bhUssKDEIOnKmnEf51P0Z/HJTWvTKw/UHyOvQ==",
+      "bin": "codex",
+      "note": "Pulls a per-architecture optional dependency carrying the Rust binary, which is why the CLIs are installed in the target-native runtime stage."
+    },
+    "opencode": {
+      "package": "opencode-ai",
+      "version": "1.18.15",
+      "integrity": "sha512-97T8+zrW9LwA1X2giwNSUAmsZm6Ilejq3cLpih3y2X6qYZyT8HjuVawFyZut8F3XBge1pfG7SOh5/1dJcteSOw==",
+      "bin": "opencode"
+    },
+    "pi": {
+      "package": "@earendil-works/pi-coding-agent",
+      "version": "0.84.2",
+      "integrity": "sha512-l4E+B7hgXKWddRo8bC/eSue2aWZjEgJ9xIpf5p0Og+lq8a2TArCwJ0HCoCPCgaBP/tN4zbYH/wOwvx9pJpeLCA==",
+      "bin": "pi",
+      "note": "plan/08 §6 guessed `@mariozechner/pi-coding-agent` and marked it [inferred — verify]: that is the package's old name, last published 0.73.1. The current one is `@earendil-works/pi-coding-agent`, which is what `pi --version` 0.84.2 on the reference machine reports."
+    }
+  },
+  "embedding_model": {
+    "repo": "Xenova/bge-small-en-v1.5",
+    "revision": "ea104dacec62c0de699686887e3f920caeb4f3e3",
+    "note": "`memory.embedding_model = \"BAAI/bge-small-en-v1.5\"` resolves to this ONNX mirror inside fastembed 6.0 (`model_code`). Baked into the image so a fresh agent does not spend its first turn downloading 130 MB; the layer is reproducible because the revision is pinned and every file is checksummed.",
+    "files": {
+      "onnx/model.onnx": "828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35",
+      "tokenizer.json": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+      "config.json": "fa73f90bf92c8cace1fbcb709626306f2bdbc9ea3e5b5f94b440df9b6aa56350",
+      "special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+      "tokenizer_config.json": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3"
+    }
+  }
+}

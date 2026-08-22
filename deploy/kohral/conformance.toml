@@ -1,0 +1,88 @@
+# Conformance profile of the Kohral runtime image (`plan/08-kohral-runtime.md`
+# §1.9 and §8). Loaded through `KEVIN_CONFIG`; `kevin.profile` stays `kohral`,
+# so the contract the suite exercises is the one production serves.
+#
+# What it changes, and only that:
+#   * the `fake` worker is the only worker, carrying the two conformance hooks
+#     (`[[KOHRAL_HOLD]]` → hang until killed, `reply deterministically` →
+#     output exactly `kohral-ok`) through `conformance-scenario.json`;
+#   * `workers.fake.enabled = true` also flips the ledger narrative to
+#     "answer only", because `contract.py` asserts the completed output is
+#     byte-for-byte `kohral-ok` (`kevin_kohral::projection::Narrative`);
+#   * memory and evaluation are off — no embedding model download, no judge
+#     pass, nothing that would make a contract run depend on a model;
+#   * budgets and timeouts are seconds, not hours, so a hung phase fails the
+#     CI job instead of hanging it.
+#
+# The production image ships `workers.fake.enabled = false` (the default): this
+# file is mounted only by `compose.conformance.yaml`.
+
+[kevin]
+auto_approve_plans = true
+
+[budget]
+default_run_usd = 1.0
+default_task_usd = 1.0
+default_run_wall = "120s"
+default_task_wall = "20s"
+max_attempts = 1
+max_parallel_tasks = 4
+
+[orchestrator]
+role_call_timeout = "20s"
+question_default_timeout = "1s"
+progress_interval = "100ms"
+
+# A Kohral workload has no repository: nothing to clone, nothing to push
+# (`plan/05-orchestration.md` §5).
+[workspace]
+strategy = "in_place"
+cleanup = "never"
+integration = "none"
+
+[memory]
+enabled = false
+
+[evaluation]
+enabled = false
+
+[workers.claude]
+enabled = false
+[workers.codex]
+enabled = false
+[workers.pi]
+enabled = false
+[workers.opencode]
+enabled = false
+
+[workers.fake]
+enabled = true
+script = "/opt/kevin/config/conformance-scenario.json"
+
+# `[models.fake]` is a built-in default alias (worker = "fake"), so only the
+# bindings have to move.
+[roles]
+planner = "fake"
+clarifier = "fake"
+judge = "fake"
+integrator = "fake"
+default = "fake"
+
+# Every routing kind must name aliases whose worker is enabled, and the real
+# workers are off here — so every kind routes to `fake`.
+[routing.kinds.implement]
+candidates = ["fake"]
+[routing.kinds.test]
+candidates = ["fake"]
+[routing.kinds.review]
+candidates = ["fake"]
+[routing.kinds.research]
+candidates = ["fake"]
+[routing.kinds.write]
+candidates = ["fake"]
+[routing.kinds.debug]
+candidates = ["fake"]
+[routing.kinds.refactor]
+candidates = ["fake"]
+[routing.kinds.ops]
+candidates = ["fake"]

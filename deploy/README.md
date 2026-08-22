@@ -12,7 +12,7 @@ This directory holds the artefacts for the three topologies in
 | `Dockerfile` | The **Kevin daemon** image: multi-stage build, `kevin serve`, no agent CLIs. |
 | `systemd/kevin.service` | The VPS unit: non-root user, `EnvironmentFile`, `SIGHUP` reload, sandbox directives. See [`systemd/README.md`](./systemd/README.md). |
 | `scripts/backup-restore-test.sh` | Exercises the backup procedure: `pg_dump` → restore into a scratch database → row counts → `kevin db rebuild-projection --all` → compare. |
-| `kohral/` | The Kohral image and stack (WS-23) — bundles the agent CLIs. Not in this repository yet. |
+| `kohral/` | The **Kohral runtime** image and per-agent stack — the same daemon *plus* the agent CLIs, `sandbox.tier = "container"`, `kevin serve --kohral`. See [`kohral/README.md`](./kohral/README.md). |
 
 ## Which topology?
 
