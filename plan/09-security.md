@@ -221,6 +221,29 @@ and what is still a gap, each with the test that proves it — are recorded in
 [`docs/security-checklist.md`](../docs/security-checklist.md). Update that
 document whenever a row below changes state.
 
+**Four rows below are still gaps** at the end of v1. They are specified here and
+not implemented; none is a hardening-sized change, so each needs its own piece of
+work:
+
+1. **Out-of-workspace write detection** (`kevin-workspace`) — the post-attempt
+   diff of watched paths (`$HOME/.ssh`, `$HOME/.config`, the repo root outside
+   the worktree) described under *Workspace isolation* does not exist; the only
+   trace in the tree is an unused `kevin.workspace.escape_detected` event
+   constant. The largest gap, and the recommended next security workstream.
+2. **The Kohral configuration overlay guard** (`kevin-kohral`) — the native
+   overlay of [08 §5.2](./08-kohral-runtime.md) is not implemented on the Kevin
+   side at all, so neither is the protected-section guard. Whoever implements the
+   overlay must implement the guard in the same PR: an overlay without it hands a
+   Kohral operator the sandbox tier. Kohral's own `validateConfiguration()` is
+   today the only enforcement.
+3. **The Kohral memory scope** (`repo:<agent-id>`) — nothing in `kevin-kohral` or
+   the `serve` wiring sets a memory scope, so a Kohral agent uses the ordinary
+   repo-hash scope. Low severity while a stack hosts one agent; it is the
+   mechanism *Memory privacy* relies on if a stack ever hosts two.
+4. **Duplicated single sources of truth** — `FORBIDDEN_FLAGS` and `EnvAllowlist`
+   each exist twice. The flag tables are guarded by `ac_ws25_5_5`; the second
+   `EnvAllowlist` in `kevin-workspace` is dead code and should be deleted.
+
 | Workstream | Must verify before PR |
 |---|---|
 | kevin-config | project-layer restrictions enforced; secrets redacted in `config show`; insecure bind rejected |

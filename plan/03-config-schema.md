@@ -157,7 +157,7 @@ tags = ["summarise","classify","cheap"]
 
 [models.gpt56-codex]
 worker = "codex"
-model = "gpt-5.6"                     # [inferred — verify current Codex default model id]
+model = "gpt-5.6"                     # verified: a known model id in codex-cli 0.149.0
 tier = "frontier"
 tags = ["coding","implement","review"]
 # prices unknown → leave unset; cost accounting reports null for this alias

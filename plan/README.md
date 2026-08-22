@@ -46,5 +46,5 @@ agents in parallel. Start with `00`–`03` (the contract), then your workstream 
 - Read `~/.kb/index.md` triggers (conventional commits, jj, PR workflow) — the repo uses **jj**.
 - One workstream = one workspace = one (or a few) PRs; acceptance criteria become `ac_wsNN_*` tests first.
 - Frozen interfaces change only via a plan PR (doc + ADR).
-- `[inferred — verify]` marks facts to confirm against the installed tool before relying on them.
+- `[inferred — verify]` marks facts to confirm against the installed tool before relying on them. One remains in the plan text ([04](./04-workers.md) §Adapter: claude — `result.structured_output` and the `error_*` result subtypes); per-adapter fixture metadata (`crates/kevin-worker/tests/fixtures/<kind>/inferred.meta.toml`) is the authoritative record of what is still inferred. A live capture settles them.
 - `just ci` must be green before a PR; no AI attribution in commits/PRs.

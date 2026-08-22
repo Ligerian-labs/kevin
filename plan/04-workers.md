@@ -146,9 +146,21 @@ Event mapping (stream-json, one JSON object per line):
 | `{"type":"result","subtype":"success","result","total_cost_usd","usage","session_id","structured_output"?}` | `Final{text=result, structured, usage(cost_usd=total_cost_usd)}` |
 | `{"type":"result","subtype":"error_max_turns" / "error_during_execution"}` | `Failed{Permanent / Transient}` |
 
-`is_error` on result, `structured_output` field name and the exact
-`error_*` subtypes: `[inferred — verify against the installed version's
-`--output-format stream-json` output; golden fixtures pin them]`.
+Verified against `claude` **2.1.239** by a real capture
+(`crates/kevin-worker/tests/fixtures/claude/success.jsonl`, argv and scrubbing
+recorded in `success.meta.toml`): `system/init`, `assistant/thinking`,
+`assistant/tool_use`, `user/tool_result` (incl. `is_error`), `assistant/text`,
+`result/success` with `usage` + `total_cost_usd`, and the `rate_limit_event`,
+`system/hook_started`, `system/hook_response`, `system/thinking_tokens` lines
+the adapter ignores.
+
+Still `[inferred — verify]`: `result.structured_output` (the `--json-schema`
+path) and the `error_max_turns` / `error_during_execution` subtypes. All three
+strings are present in the 2.1.239 binary and are pinned by hand-written
+fixtures, but none has been observed live; `inferred.meta.toml` records exactly
+which field of each fixture is inferred. What would settle them: a live capture,
+`KEVIN_LIVE_TESTS=1 cargo nextest run -p kevin-worker live_ -- --run-ignored all`.
+
 Effort: no CLI flag → effort is ignored for claude (model alias carries it).
 
 ## Adapter: `codex` (OpenAI Codex CLI)
@@ -367,12 +379,22 @@ impl WorkerRegistry {
 `claude  /Users/x/.local/bin/claude  2.1.x  auth: ready  models: opus5-claude, sonnet5-claude, …`,
 `codex   missing (workers.codex.bin = "codex")  → disable or install`, and
 exits 1 if any *enabled* worker is missing or a role alias is unusable.
-Auth readiness: claude → `claude auth status` or `~/.claude` credentials present
-`[inferred — verify]`; codex → `$CODEX_HOME/auth.json` or `OPENAI_API_KEY`; pi →
-`pi auth check --provider <p> --json --no-refresh` per configured alias provider
-(offline, spends nothing); opencode → a provider API key,
-`~/.local/share/opencode/auth.json`, or the credential count of
-`opencode providers list` (verified, 1.18.15).
+Auth readiness — every probe is offline and spends nothing; all four are now
+implemented and verified against the installed CLIs:
+
+- claude → `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`, else
+  `~/.claude/.credentials.json`. `claude auth status` is deliberately **not**
+  called (it can cost a request); when `~/.claude` exists without a credentials
+  file the answer is `Unknown` with a hint, because macOS keeps the OAuth token
+  in the keychain where Kevin cannot read it.
+- codex → `OPENAI_API_KEY`, else `$CODEX_HOME/auth.json` (`$CODEX_HOME`
+  defaulting to `~/.codex`).
+- pi → `pi auth check --provider <p> --json --no-refresh` per configured alias
+  provider; `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` also count.
+- opencode → a provider API key (`OPENCODE_API_KEY`, `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`),
+  `~/.local/share/opencode/auth.json`, or the credential count of
+  `opencode providers list` (verified, 1.18.15).
 
 ## Testing
 

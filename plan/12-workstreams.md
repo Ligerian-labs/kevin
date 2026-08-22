@@ -88,6 +88,44 @@ Within a wave, agents code against frozen interfaces + `kevin-testkit` fakes;
 wave N+1 starts when its dependencies' PRs are merged (or, for eager agents,
 rebased on the dependency's branch).
 
+### Status: all workstreams delivered
+
+Every workstream below is merged. The entries stay as written (they are the
+contract the code was built against); this table is the record of what landed.
+
+| WS | Title | PR |
+|---|---|---|
+| WS-00 | Bootstrap | [#2](https://github.com/Ligerian-labs/kevin/pull/2) |
+| WS-01 | Domain model | [#11](https://github.com/Ligerian-labs/kevin/pull/11) |
+| WS-02 | Configuration | [#3](https://github.com/Ligerian-labs/kevin/pull/3) |
+| WS-03 | Event store & Postgres platform | [#8](https://github.com/Ligerian-labs/kevin/pull/8) |
+| WS-04 | Telemetry & bus | [#7](https://github.com/Ligerian-labs/kevin/pull/7) |
+| WS-05 | Worker core, supervisor, fake worker | [#10](https://github.com/Ligerian-labs/kevin/pull/10) |
+| WS-06 | Claude adapter | [#13](https://github.com/Ligerian-labs/kevin/pull/13) |
+| WS-07 | Workspace isolation & integration | [#4](https://github.com/Ligerian-labs/kevin/pull/4) |
+| WS-08 | Orchestrator engine | [#22](https://github.com/Ligerian-labs/kevin/pull/22) |
+| WS-09 | Router v1 | [#18](https://github.com/Ligerian-labs/kevin/pull/18) |
+| WS-10 | Roles, prompts & schemas | [#15](https://github.com/Ligerian-labs/kevin/pull/15) |
+| WS-11 | Projections & read models | [#16](https://github.com/Ligerian-labs/kevin/pull/16) |
+| WS-12 | CLI `kevin run` + embedded runtime | [#25](https://github.com/Ligerian-labs/kevin/pull/25) |
+| WS-13 | Codex adapter | [#19](https://github.com/Ligerian-labs/kevin/pull/19) |
+| WS-14 | Pi adapter | [#21](https://github.com/Ligerian-labs/kevin/pull/21) |
+| WS-15 | OpenCode adapter | [#20](https://github.com/Ligerian-labs/kevin/pull/20) |
+| WS-16 | HTTP API | [#26](https://github.com/Ligerian-labs/kevin/pull/26) |
+| WS-17 | TUI | [#27](https://github.com/Ligerian-labs/kevin/pull/27) |
+| WS-18 | Memory | [#17](https://github.com/Ligerian-labs/kevin/pull/17) |
+| WS-19 | Evaluator | [#24](https://github.com/Ligerian-labs/kevin/pull/24) |
+| WS-20 | Daemon mode & operations | [#28](https://github.com/Ligerian-labs/kevin/pull/28) |
+| WS-21 | Release engineering | [#23](https://github.com/Ligerian-labs/kevin/pull/23) |
+| WS-22 | Kohral runtime contract | [#30](https://github.com/Ligerian-labs/kevin/pull/30) |
+| WS-23 | Kohral image & stack | [#31](https://github.com/Ligerian-labs/kevin/pull/31) |
+| WS-24 | Kohral `KevinRuntimeStrategy` | `Ligerian-labs/kohral` [#61](https://github.com/Ligerian-labs/kohral/pull/61) |
+| WS-25 | Hardening | [#32](https://github.com/Ligerian-labs/kevin/pull/32) |
+
+Deferred out of these workstreams, tracked in [13](./13-roadmap.md): the
+Kohral collaboration phase 2 of [08 §4](./08-kohral-runtime.md) (client,
+request ledger, `kevin mcp collaboration`) and the docs site of WS-21.
+
 ---
 
 ## Wave 1
@@ -188,7 +226,7 @@ rebased on the dependency's branch).
 
 ### WS-13 / WS-14 / WS-15 — Codex / Pi / OpenCode adapters
 - **Owns:** `crates/kevin-worker/src/{codex,pi,opencode}.rs` + fixtures.
-- **Provides:** `CodexWorker`, `PiWorker`, `OpencodeWorker` per [04](./04-workers.md); flags marked `[inferred — verify]` must be verified against the installed CLI and the doc updated.
+- **Provides:** `CodexWorker`, `PiWorker`, `OpencodeWorker` per [04](./04-workers.md); flags marked `[inferred — verify]` must be verified against the installed CLI and the doc updated. *(Done: each adapter records what was observed live versus read out of the binary in its `tests/fixtures/<kind>/{success,inferred}.meta.toml`, and [04](./04-workers.md) now states which facts remain inferred.)*
 - **Acceptance (each):** golden fixture mapping; usage extraction or documented absence; sandbox/bypass policy enforced; `doctor` detects binary + auth; smoke test behind `KEVIN_LIVE_TESTS=1`.
 - **Size:** S–M each.
 
