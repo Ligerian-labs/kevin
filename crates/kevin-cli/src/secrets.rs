@@ -21,7 +21,12 @@ use kevin_telemetry::redact::Redactor;
 /// not a validation step (`kevin config validate` owns that), and a failure
 /// here must never stop a command from running.
 pub fn register(config: &KevinConfig) {
-    let redactor = Redactor::global();
+    register_into(Redactor::global(), config);
+}
+
+/// [`register`] against an explicit redactor, so a test can assert what was
+/// registered without touching the process-wide one.
+pub fn register_into(redactor: &Redactor, config: &KevinConfig) {
     if let Some(password) = url_password(&config.database.url) {
         redactor.register_secret(password);
     }
@@ -53,7 +58,11 @@ fn url_password(url: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::url_password;
+    use std::os::unix::fs::PermissionsExt as _;
+
+    use kevin_telemetry::redact::Redactor;
+
+    use super::{register_into, url_password};
 
     #[test]
     fn url_password_is_extracted_only_when_present() {
@@ -67,5 +76,36 @@ mod tests {
         assert_eq!(url_password("not a url"), None);
         // An `@` in the path must not be read as an authority separator.
         assert_eq!(url_password("postgres://localhost/db@name"), None);
+    }
+
+    /// `plan/09` §Redaction: "the exact runtime values of every secret Kevin
+    /// loaded at startup". The pattern list cannot catch a password that looks
+    /// like a word or a hand-written bearer token, so they are registered.
+    #[cfg(unix)]
+    #[test]
+    fn ac_ws25_14_1_startup_registers_the_db_password_and_the_token_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let token = dir.path().join("token");
+        std::fs::write(&token, "correct-horse-battery-staple\n").expect("write");
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).expect("chmod");
+
+        let mut config = kevin_config::KevinConfig::default();
+        config.database.url = "postgres://kevin:tr0ub4dor@db.internal:5432/kevin".to_owned();
+        config.server.auth_token_file = token;
+        // A path that does not exist must not stop the others being registered.
+        config.kohral.token_file = dir.path().join("absent");
+
+        let redactor = Redactor::default();
+        // Before: both values pass through untouched — the patterns do not
+        // recognise them, which is exactly why registering matters.
+        assert!(redactor.redact_str("psql tr0ub4dor").contains("tr0ub4dor"));
+        register_into(&redactor, &config);
+
+        let masked = redactor.redact_str("psql tr0ub4dor");
+        assert!(!masked.contains("tr0ub4dor"), "{masked}");
+        let masked = redactor.redact_str("auth correct-horse-battery-staple ok");
+        assert!(!masked.contains("correct-horse"), "{masked}");
+        // Registration is by hash: the redactor never holds the clear value.
+        assert!(!format!("{redactor:?}").contains("tr0ub4dor"));
     }
 }
