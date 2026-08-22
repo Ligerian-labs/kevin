@@ -79,8 +79,9 @@ pub use server::{ApiOptions, router, router_with};
 #[cfg(feature = "server")]
 mod server {
     use std::time::Duration;
+    use std::time::Instant;
 
-    use axum::extract::{DefaultBodyLimit, State};
+    use axum::extract::{DefaultBodyLimit, MatchedPath, State};
     use axum::http::{HeaderName, HeaderValue, Method, StatusCode};
     use axum::response::{Html, IntoResponse, Response};
     use axum::routing::get;
@@ -155,6 +156,7 @@ mod server {
             .nest("/api/v1", versioned.merge(unauthenticated))
             .merge(routes::health::router().with_state(state))
             .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+            .layer(middleware::from_fn(record_request))
             .layer(middleware::from_fn(request_id::layer))
             .layer(TraceLayer::new_for_http());
 
@@ -162,6 +164,57 @@ mod server {
             app = app.layer(cors);
         }
         app.fallback(not_found)
+    }
+
+    /// `kevin_api_requests_total` / `kevin_api_request_duration_seconds`
+    /// (plan/10 §Metrics).
+    ///
+    /// The `route` label is the **matched path template**, never the concrete
+    /// URI, so an endpoint taking an id contributes one series and not one per
+    /// run. Unmatched requests are folded into `"other"`.
+    async fn record_request(request: axum::extract::Request, next: middleware::Next) -> Response {
+        let method = method_label(request.method());
+        let route = request
+            .extensions()
+            .get::<MatchedPath>()
+            .map_or_else(|| "other".to_owned(), |p| p.as_str().to_owned());
+        let started = Instant::now();
+        let response = next.run(request).await;
+        let status_class = match response.status().as_u16() {
+            100..=199 => "1xx",
+            200..=299 => "2xx",
+            300..=399 => "3xx",
+            400..=499 => "4xx",
+            _ => "5xx",
+        };
+        metrics::counter!(
+            kevin_telemetry::metrics::API_REQUESTS_TOTAL,
+            "route" => route.clone(),
+            "method" => method,
+            "status_class" => status_class,
+        )
+        .increment(1);
+        metrics::histogram!(
+            kevin_telemetry::metrics::API_REQUEST_DURATION_SECONDS,
+            "route" => route,
+            "method" => method,
+        )
+        .record(started.elapsed().as_secs_f64());
+        response
+    }
+
+    /// Bounded `method` label: anything exotic becomes `"other"`.
+    fn method_label(method: &Method) -> &'static str {
+        match *method {
+            Method::GET => "GET",
+            Method::POST => "POST",
+            Method::PUT => "PUT",
+            Method::DELETE => "DELETE",
+            Method::PATCH => "PATCH",
+            Method::HEAD => "HEAD",
+            Method::OPTIONS => "OPTIONS",
+            _ => "other",
+        }
     }
 
     /// `GET /api/v1/openapi.json` — exempt from auth (plan/07).

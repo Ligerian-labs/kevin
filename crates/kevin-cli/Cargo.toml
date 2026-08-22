@@ -33,14 +33,17 @@ kevin-tui.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
+axum.workspace = true
 chrono.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 comfy-table.workspace = true
 humantime.workspace = true
+metrics.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
@@ -51,6 +54,8 @@ uuid.workspace = true
 assert_cmd.workspace = true
 chrono.workspace = true
 kevin-testkit = { workspace = true, features = ["pg"] }
+reqwest.workspace = true
+secrecy.workspace = true
 sqlx.workspace = true
 predicates.workspace = true
 serde_json.workspace = true

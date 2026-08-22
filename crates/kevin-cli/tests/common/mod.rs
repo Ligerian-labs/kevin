@@ -183,6 +183,7 @@ pub struct Harness {
     tmp: TempDir,
     config: PathBuf,
     repo: PathBuf,
+    token: String,
 }
 
 impl Harness {
@@ -193,9 +194,27 @@ impl Harness {
 
     /// A harness whose fake worker runs `scenario` (YAML).
     pub async fn with_scenario(scenario: &str) -> Self {
+        Self::with_scenario_and_extra(scenario, "").await
+    }
+
+    /// A harness whose config file carries `extra` TOML on top of the defaults
+    /// (`[kevin] auto_approve_plans`, `[telemetry] metrics_bind`, …).
+    pub async fn with_scenario_and_extra(scenario: &str, extra: &str) -> Self {
         let db = TestDb::new().await;
         let url = db.url().to_owned();
-        Self::build(Some(db), &url, scenario)
+        let mut harness = Self::build(Some(db), &url, scenario);
+        if !extra.is_empty() {
+            let base = std::fs::read_to_string(&harness.config).expect("read config");
+            std::fs::write(&harness.config, merge_toml(&base, extra)).expect("write config");
+        }
+        harness.reload_token();
+        harness
+    }
+
+    fn reload_token(&mut self) {
+        let token = std::fs::read_to_string(self.token_file()).expect("token file");
+        self.token.clear();
+        self.token.push_str(token.trim());
     }
 
     /// A harness with no database: for the argument-validation scenarios that
@@ -212,13 +231,49 @@ impl Harness {
         }
         let script = root.join("scenario.yaml");
         std::fs::write(&script, scenario).expect("write scenario");
+        let token = "ws20-test-token-aaaaaaaaaaaaaaaaaaaa".to_owned();
+        std::fs::write(root.join("token"), format!("{token}\n")).expect("write token");
         let config = root.join("kevin.toml");
         std::fs::write(&config, config_toml(root, url, &script)).expect("write config");
         Self {
             db,
             config,
             repo: root.join("repo"),
+            token,
             tmp,
+        }
+    }
+
+    /// Root of the hermetic temp tree.
+    pub fn root(&self) -> &Path {
+        self.tmp.path()
+    }
+
+    /// The config file every `kevin` invocation of this harness reads.
+    pub fn config_path(&self) -> &Path {
+        &self.config
+    }
+
+    /// `server.auth_token_file`.
+    pub fn token_file(&self) -> PathBuf {
+        self.tmp.path().join("token")
+    }
+
+    /// The current bearer token.
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
+    /// `kevin.data_dir`.
+    pub fn data_dir(&self) -> PathBuf {
+        self.tmp.path().join("data")
+    }
+
+    /// Drops the per-test database *under* a running daemon, which is how a
+    /// "db down" incident looks to `/readyz` (`plan/10` §Runbooks).
+    pub async fn kill_database(&mut self) {
+        if let Some(db) = self.db.take() {
+            db.close().await;
         }
     }
 
@@ -391,6 +446,29 @@ fn signal_interrupt(_pid: u32) {
     unimplemented!("the Ctrl-C scenario needs a unix signal");
 }
 
+/// Deep-merges `extra` into `base`; `extra` wins on a leaf. Appending raw TOML
+/// would duplicate `[kevin]`/`[telemetry]`, which the loader rejects.
+fn merge_toml(base: &str, extra: &str) -> String {
+    fn merge(into: &mut toml::Table, from: toml::Table) {
+        for (key, value) in from {
+            match (into.get_mut(&key), value) {
+                (Some(toml::Value::Table(target)), toml::Value::Table(source)) => {
+                    merge(target, source);
+                }
+                (_, value) => {
+                    into.insert(key, value);
+                }
+            }
+        }
+    }
+    let mut merged: toml::Table = base.parse().expect("base config is valid TOML");
+    merge(
+        &mut merged,
+        extra.parse().expect("extra config is valid TOML"),
+    );
+    toml::to_string_pretty(&merged).expect("serialise the merged config")
+}
+
 fn config_toml(root: &Path, url: &str, script: &Path) -> String {
     let data_dir = root.join("data");
     let mut toml = format!(
@@ -408,6 +486,14 @@ auto_migrate = true
 
 [client]
 server_url = ""
+token_file = "{token_file}"
+
+[server]
+enabled = true
+bind = "127.0.0.1:0"
+auth_token_file = "{token_file}"
+docs = false
+token_grace = "5m"
 
 [budget]
 default_run_usd = 100.0
@@ -472,6 +558,7 @@ policy = "fixed"
         data = data_dir.display(),
         url = url,
         script = script.display(),
+        token_file = root.join("token").display(),
     );
     for kind in [
         "implement",
@@ -486,4 +573,143 @@ policy = "fixed"
         let _ = write!(toml, "\n[routing.kinds.{kind}]\ncandidates = [\"fake\"]\n");
     }
     toml
+}
+
+// ---------------------------------------------------------------------------
+// `kevin serve` (WS-20)
+// ---------------------------------------------------------------------------
+
+/// Marker `kevin serve` prints once the API is bound and the runtime is ready.
+const LISTENING: &str = "kevin serve listening on ";
+/// Marker `kevin serve` prints when `telemetry.metrics_bind` is set.
+const METRICS: &str = "metrics on ";
+
+/// A running `kevin serve`, with the addresses it printed on startup.
+pub struct Daemon {
+    child: tokio::process::Child,
+    pid: u32,
+    api: String,
+    metrics: Option<String>,
+}
+
+impl std::fmt::Debug for Daemon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Daemon")
+            .field("pid", &self.pid)
+            .field("api", &self.api)
+            .field("metrics", &self.metrics)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Harness {
+    /// Starts `kevin serve` and waits until it says it is listening.
+    ///
+    /// The bind is `127.0.0.1:0`, so the port comes back from the daemon's own
+    /// startup line — several of these can run in parallel under nextest.
+    pub async fn serve(&self, args: &[&str]) -> Daemon {
+        let bin = assert_cmd::cargo::cargo_bin("kevin");
+        let home = self.tmp.path().join("home");
+        let mut child = tokio::process::Command::new(bin)
+            .current_dir(&self.repo)
+            .env_clear()
+            .env("PATH", std::env::var("PATH").unwrap_or_default())
+            .env("HOME", &home)
+            .env("XDG_CONFIG_HOME", home.join(".config"))
+            .env("XDG_DATA_HOME", self.tmp.path().join("data"))
+            .env("USER", "tester")
+            .env("KEVIN_CONFIG", &self.config)
+            .env("NO_COLOR", "1")
+            .arg("serve")
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("spawn kevin serve");
+        let pid = child.id().expect("child pid");
+        let stdout = child.stdout.take().expect("piped stdout");
+
+        let mut lines = BufReader::new(stdout).lines();
+        let mut api = None;
+        let mut metrics = None;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(90);
+        while api.is_none() {
+            let next = tokio::time::timeout_at(deadline, lines.next_line())
+                .await
+                .expect("kevin serve became ready")
+                .expect("reading kevin serve stdout");
+            let Some(line) = next else {
+                panic!("kevin serve exited before it was ready");
+            };
+            if let Some(rest) = line.strip_prefix(LISTENING) {
+                api = Some(rest.trim().to_owned());
+            } else if let Some(rest) = line.strip_prefix(METRICS) {
+                metrics = Some(rest.trim().to_owned());
+            }
+        }
+        // Keep draining, or the daemon blocks on a full pipe.
+        tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
+
+        Daemon {
+            child,
+            pid,
+            api: api.expect("the listening line"),
+            metrics,
+        }
+    }
+}
+
+impl Daemon {
+    /// Base URL of the HTTP API.
+    pub fn api(&self) -> &str {
+        &self.api
+    }
+
+    /// URL of the Prometheus endpoint (`telemetry.metrics_bind`), if enabled.
+    pub fn metrics_url(&self) -> Option<&str> {
+        self.metrics.as_deref()
+    }
+
+    /// Process id, for signalling.
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    /// Sends a signal by name (`TERM`, `INT`, `HUP`, `KILL`).
+    pub fn signal(&self, name: &str) {
+        let status = std::process::Command::new("kill")
+            .args([&format!("-{name}"), &self.pid.to_string()])
+            .status();
+        assert!(
+            status.is_ok_and(|s| s.success()),
+            "could not send SIG{name} to {}",
+            self.pid
+        );
+    }
+
+    /// Waits for the daemon to exit, failing the test after `within`.
+    pub async fn wait(mut self, within: Duration) -> Option<i32> {
+        tokio::time::timeout(within, self.child.wait())
+            .await
+            .unwrap_or_else(|_| panic!("kevin serve did not exit within {within:?}"))
+            .expect("wait")
+            .code()
+    }
+
+    /// A typed client pointed at this daemon.
+    pub fn client(&self, token: &str) -> kevin_api::client::KevinClient {
+        kevin_api::client::KevinClient::connect(&self.api, secrecy::SecretString::from(token))
+            .expect("client")
+    }
+
+    /// `GET <path>` on the API, returning `(status, body)`.
+    pub async fn get(&self, path: &str) -> (u16, String) {
+        let response = reqwest::get(format!("{}{path}", self.api))
+            .await
+            .expect("request");
+        let status = response.status().as_u16();
+        (status, response.text().await.unwrap_or_default())
+    }
 }

@@ -1,0 +1,80 @@
+; Kevin agent runtime — VPS unit (plan/07-api-and-tui.md §5, plan/10-observability-ops.md).
+; Install: see deploy/systemd/README.md. Edit nothing here; put overrides in
+; `systemctl edit kevin` and secrets in /etc/kevin/kevin.env (mode 0600).
+
+[Unit]
+Description=Kevin agent runtime
+Documentation=https://github.com/Ligerian-labs/kevin
+; Kevin needs the database; drop `postgresql.service` when it is remote.
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=kevin
+Group=kevin
+
+Environment=KEVIN__KEVIN__PROFILE=server
+Environment=KEVIN__KEVIN__DATA_DIR=/var/lib/kevin
+Environment=KEVIN__SERVER__BIND=127.0.0.1:7777
+; KEVIN__DATABASE__URL_FILE, KEVIN__SERVER__AUTH_TOKEN_FILE, RUST_LOG …
+; The leading `-` makes the unit start even before the file exists.
+EnvironmentFile=-/etc/kevin/kevin.env
+
+; The `server` profile keeps `database.auto_migrate = false`: migrate once,
+; before the daemon can write anything against a schema it does not have.
+ExecStartPre=/usr/local/bin/kevin db migrate
+ExecStart=/usr/local/bin/kevin serve
+; `kevin config rotate-token && systemctl reload kevin` rotates the bearer
+; token with no downtime — the previous one stays valid for server.token_grace.
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5s
+; SIGTERM starts the graceful shutdown; systemd must wait for it to finish:
+; kevin.shutdown_grace_period (30s) + workers.kill_grace (10s) + slack.
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=60
+
+; --- filesystem -------------------------------------------------------------
+; /var/lib/kevin — artifact copies, worker transcripts, embedding-model cache.
+StateDirectory=kevin
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/kevin
+ReadWritePaths=/var/lib/kevin
+
+; --- hardening (plan/09-security.md) ----------------------------------------
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+; --- limits -----------------------------------------------------------------
+; One worker subprocess holds several pipes; the pool and SSE streams add up.
+LimitNOFILE=65535
+; Do not let a runaway agent take the host down with it.
+TasksMax=4096
+
+[Install]
+WantedBy=multi-user.target

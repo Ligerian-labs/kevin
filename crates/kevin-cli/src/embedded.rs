@@ -62,7 +62,9 @@ pub struct Backend {
     config: Arc<KevinConfig>,
     pool: PgPool,
     store: Arc<PgEventStore>,
+    store_erased: Arc<dyn EventStore>,
     bus: Arc<InProcBus>,
+    bus_erased: Arc<dyn EventBus>,
     commands: Arc<CommandLog>,
     ids: Arc<UuidV7IdGen>,
     clock: Arc<SystemClock>,
@@ -115,7 +117,9 @@ impl Backend {
             questions: QuestionService::new(core),
             config,
             pool,
+            store_erased: Arc::clone(&store) as Arc<dyn EventStore>,
             store,
+            bus_erased: Arc::clone(&bus) as Arc<dyn EventBus>,
             bus,
             commands,
             ids,
@@ -156,6 +160,18 @@ impl Backend {
     #[must_use]
     pub fn bus(&self) -> &Arc<InProcBus> {
         &self.bus
+    }
+
+    /// The event store behind its trait object (what `kevin-api` wants).
+    #[must_use]
+    pub fn store_erased(&self) -> &Arc<dyn EventStore> {
+        &self.store_erased
+    }
+
+    /// The event bus behind its trait object (what `kevin-api` wants).
+    #[must_use]
+    pub fn bus_erased(&self) -> &Arc<dyn EventBus> {
+        &self.bus_erased
     }
 
     /// Typed queries over the `orch.*` read models.
@@ -213,7 +229,8 @@ impl Backend {
 /// A booted, in-process Kevin: [`Backend`] + projection runners + orchestrator.
 pub struct EmbeddedRuntime {
     backend: Backend,
-    handle: Handle,
+    handle: Arc<Handle>,
+    memory: Option<Arc<MemoryStore>>,
     cancel: CancellationToken,
     projections: Vec<JoinHandle<Result<(), projections::ProjectionError>>>,
 }
@@ -269,7 +286,7 @@ impl EmbeddedRuntime {
             &workers,
             repo_root,
             &router,
-            memory_store,
+            memory_store.clone(),
         );
         let task_log = Arc::new(TaskLog::new(backend.pool.clone()));
 
@@ -300,7 +317,8 @@ impl EmbeddedRuntime {
 
         Ok(Self {
             backend,
-            handle,
+            handle: Arc::new(handle),
+            memory: memory_store,
             cancel,
             projections,
         })
@@ -314,8 +332,28 @@ impl EmbeddedRuntime {
 
     /// The live orchestration engine.
     #[must_use]
-    pub const fn handle(&self) -> &Handle {
+    pub fn handle(&self) -> &Handle {
         &self.handle
+    }
+
+    /// The engine as a shared handle (`kevin-api`'s `OrchestratorRuntime`).
+    #[must_use]
+    pub fn handle_arc(&self) -> Arc<Handle> {
+        Arc::clone(&self.handle)
+    }
+
+    /// The pgvector memory store, when `memory.enabled` and the embedder
+    /// loaded — shared with the saga and the evaluator, so `kevin serve` loads
+    /// the embedding model exactly once.
+    #[must_use]
+    pub const fn memory_store(&self) -> Option<&Arc<MemoryStore>> {
+        self.memory.as_ref()
+    }
+
+    /// Token every background task of this runtime stops on.
+    #[must_use]
+    pub const fn cancel(&self) -> &CancellationToken {
+        &self.cancel
     }
 
     /// Typed queries over the `orch.*` read models.

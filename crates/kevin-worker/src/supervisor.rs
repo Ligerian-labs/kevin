@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use kevin_domain::{FailureClass, WorkerKind};
+use kevin_telemetry::metrics as metric_names;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
@@ -358,8 +359,9 @@ impl Supervisor {
                 std::io::Error::other("child exited before its pid could be read"),
             )
         })?;
-        metrics::counter!("kevin_worker_spawns_total", "kind" => kind.as_str()).increment(1);
-        metrics::gauge!("kevin_worker_active", "kind" => kind.as_str()).increment(1.0);
+        metrics::histogram!(metric_names::WORKER_SPAWN_DURATION_SECONDS, "worker" => kind.as_str())
+            .record(start.elapsed().as_secs_f64());
+        metrics::gauge!(metric_names::WORKER_PROCESSES, "worker" => kind.as_str()).increment(1.0);
         tracing::debug!(kind = %kind, pid, program = %program, cwd = %cwd.display(), "spawned worker process");
 
         let counters = Arc::new(Counters::default());
@@ -478,15 +480,30 @@ async fn supervise(
         None => None,
     };
     let wall = start.elapsed();
-    metrics::gauge!("kevin_worker_active", "kind" => kind.as_str()).decrement(1.0);
-    metrics::histogram!("kevin_worker_duration_seconds", "kind" => kind.as_str())
-        .record(wall.as_secs_f64());
+    metrics::gauge!(metric_names::WORKER_PROCESSES, "worker" => kind.as_str()).decrement(1.0);
+    metrics::counter!(
+        metric_names::WORKER_EXITS_TOTAL,
+        "worker" => kind.as_str(),
+        "class" => exit_class(reason),
+    )
+    .increment(1);
     let _ = exit_tx.send(ChildExit {
         reason,
         stderr_tail,
         transcript,
         wall,
     });
+}
+
+/// The bounded `class` label of `kevin_worker_exits_total` (plan/10 §Metrics).
+const fn exit_class(reason: ExitReason) -> &'static str {
+    match reason {
+        ExitReason::Exited(0) => "ok",
+        ExitReason::Exited(_) => "permanent",
+        ExitReason::Timeout => "timeout",
+        ExitReason::Cancelled => "killed",
+        ExitReason::Signaled(_) => "transient",
+    }
 }
 
 fn status_to_reason(status: std::process::ExitStatus) -> ExitReason {

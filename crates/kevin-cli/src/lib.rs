@@ -16,6 +16,7 @@ use clap::{Args as _, FromArgMatches as _};
 pub mod cmd;
 pub mod ctx;
 pub mod embedded;
+pub mod observability;
 pub mod render;
 pub mod version;
 
