@@ -77,7 +77,9 @@ tower = "0.5"
 tower-http = { version = "0.7", features = ["trace", "timeout", "request-id", "cors", "limit"] }
 utoipa = { version = "5.5", features = ["axum_extras", "uuid", "chrono", "decimal"] }
 utoipa-axum = "0.2"
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-tls", "stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "webpki-roots", "charset", "http2", "stream"] }
+# Constant-time comparison for the API bearer token (plan/07 §Authentication).
+subtle = { version = "2.6", default-features = false }
 
 # --- cli / tui ---
 clap = { version = "4.6", features = ["derive", "env", "wrap_help"] }

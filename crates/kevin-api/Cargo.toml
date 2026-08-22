@@ -14,9 +14,70 @@ workspace = true
 [dependencies]
 kevin-domain.workspace = true
 kevin-config.workspace = true
+
+# --- shared (both features) ---
+chrono.workspace = true
+futures.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["v5"] }
+
+# --- server ---
 kevin-orchestrator = { workspace = true, optional = true }
+kevin-router = { workspace = true, optional = true }
+kevin-store = { workspace = true, optional = true }
+kevin-bus = { workspace = true, optional = true }
+kevin-worker = { workspace = true, optional = true }
+kevin-memory = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+metrics = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true }
+subtle = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+utoipa = { workspace = true, optional = true }
+
+# --- client ---
+bytes = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+secrecy = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+
+[dev-dependencies]
+kevin-testkit = { workspace = true, features = ["pg", "api"] }
+tokio-util.workspace = true
+uuid.workspace = true
+insta.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
 
 [features]
 default = ["server"]
-server = ["dep:kevin-orchestrator"]
-client = []
+server = [
+  "dep:kevin-orchestrator",
+  "dep:kevin-router",
+  "dep:kevin-store",
+  "dep:kevin-bus",
+  "dep:kevin-worker",
+  "dep:kevin-memory",
+  "dep:async-trait",
+  "dep:axum",
+  "dep:metrics",
+  "dep:sha2",
+  "dep:sqlx",
+  "dep:subtle",
+  "dep:tokio",
+  "dep:tokio-stream",
+  "dep:tower",
+  "dep:tower-http",
+  "dep:utoipa",
+]
+client = ["dep:bytes", "dep:reqwest", "dep:secrecy", "dep:url", "dep:tokio"]

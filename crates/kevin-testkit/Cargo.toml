@@ -15,11 +15,15 @@ workspace = true
 default = []
 # Postgres harness (`pg::TestDb`): per-test databases cloned from a migrated template.
 pg = ["dep:kevin-store", "dep:sqlx", "dep:tokio"]
+# In-process fake of the HTTP API (`fake_api`): fake ports + a ready-made router.
+api = ["dep:kevin-api", "dep:axum", "dep:tokio", "tokio?/net"]
 
 [dependencies]
 kevin-domain.workspace = true
 kevin-bus.workspace = true
 kevin-store = { workspace = true, optional = true }
+kevin-api = { workspace = true, optional = true, features = ["server"] }
+axum = { workspace = true, optional = true }
 kevin-worker.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
