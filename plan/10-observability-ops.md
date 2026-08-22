@@ -106,6 +106,10 @@ prefixed `kevin_`.
 | `kevin_db_pool_connections` | gauge | `state` (idle/in_use) |
 | `kevin_telemetry_dropped_records_total` | counter | `level` |
 
+`kevin_cost_usd_total` is exported as a monotonically incremented **gauge**:
+the `metrics` facade has no float counter, `rate()` reads the same either way,
+and `orch.cost_ledger` stays the authoritative ledger behind `kevin cost`.
+
 Histogram buckets: durations `0.05..3600 s` log-scaled; scores `0.0..1.0`
 step 0.1. Optional OTLP traces via `tracing-opentelemetry` when
 `telemetry.otlp_endpoint` is set (spans above carry the same fields; sampled

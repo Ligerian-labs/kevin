@@ -105,9 +105,13 @@ Shared by the four CLI adapters:
   `<data_dir>/runs/<run_id>/<task_id>/<attempt_id>.jsonl`; the orchestrator
   mirrors parsed events into `orch.task_log`. An `ArtifactRef{kind: Transcript}`
   is returned in the outcome.
-- Metrics: `kevin_worker_spawns_total{kind}`, `kevin_worker_active{kind}`,
-  `kevin_worker_exit_total{kind,class}`, `kevin_worker_duration_seconds{kind}`,
-  `kevin_worker_tokens_total{kind,direction}`.
+- Metrics: the supervisor records `kevin_worker_processes{worker}`,
+  `kevin_worker_exits_total{worker,class}` and
+  `kevin_worker_spawn_duration_seconds{worker}`; tokens are
+  `kevin_tokens_total{model_alias,direction}`, recorded by the task runner.
+  The authoritative list (names, types and labels) is the table in
+  [10](./10-observability-ops.md) §Metrics — that is the one the exporter and
+  the `ac_ws20_4` test check against.
 
 ## Adapter: `claude` (Claude Code)
 

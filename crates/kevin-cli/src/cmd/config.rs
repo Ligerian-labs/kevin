@@ -93,6 +93,13 @@ fn process_env() -> Vec<(String, String)> {
     std::env::vars().collect()
 }
 
+/// `server.auth_token_file` with `~` expanded — what the daemon reads and what
+/// `rotate-token` writes.
+#[must_use]
+pub fn resolved_token_path(resolved: &Resolved) -> PathBuf {
+    token_path(Some(resolved), &process_env())
+}
+
 fn token_path(resolved: Option<&Resolved>, env: &[(String, String)]) -> PathBuf {
     let configured = resolved.map_or_else(
         || kevin_config::Server::default().auth_token_file,

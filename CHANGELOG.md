@@ -68,6 +68,20 @@ been tagged, so nothing below has ever shipped.
   scores and the Thompson-sampling router.
 - **Memory (WS-18).** The pgvector-backed memory store, local embeddings,
   hybrid (vector + lexical) retrieval and the `kevin memory` commands.
+- **Daemon mode and operations (WS-20).** `kevin serve [--bind ADDR]` runs the
+  full startup sequence of `plan/10-observability-ops.md` (config → telemetry →
+  database → migrations per policy → terminalise stale attempts as
+  `runtime_restarted` → rebuild the run actors → projections → bind the API →
+  ready) and the matching shutdown on `SIGTERM`/`SIGINT` (unready, stop
+  admitting, drain within `kevin.shutdown_grace_period`, cancel the remainder,
+  flush, exit). `SIGHUP` re-reads the API token, so `kevin config rotate-token`
+  rotates it with no downtime; drain is reachable through
+  `/api/v1/maintenance/drain` and turns `/readyz` 503 while `/healthz` stays
+  200. The Prometheus exporter is served on `telemetry.metrics_bind` only, and
+  every metric of `plan/10` now has a call site. `kevin db prune` honours
+  `[retention]` (task log, transcripts, artifact copies). `deploy/systemd/`
+  holds the hardened unit and its runbook, `deploy/scripts/backup-restore-test.sh`
+  rehearses the backup procedure. `kevin serve --kohral` waits for WS-22.
 - **Release engineering (WS-21).** `kevin --version` now reports the semver,
   the abbreviated commit id and the build date; the `release` workflow builds
   the four supported binary targets with checksums and a multi-arch container
@@ -80,10 +94,9 @@ been tagged, so nothing below has ever shipped.
   observability and operations, testing strategy, workstreams and roadmap —
   plus the project overview in `README.md`.
 
-Not in this build, so you know what you are not getting: there is no
-daemon entry point yet (`kevin serve`, `kevin run` and the TUI are scaffolding
-pending WS-12, WS-16, WS-17 and WS-20), the Kohral runtime contract (WS-22) and
-Kohral image (WS-23) are not implemented, and nothing is published to crates.io
-(every crate is `publish = false`).
+Not in this build, so you know what you are not getting: the TUI is still
+scaffolding (`kevin tui`, WS-17), the Kohral runtime contract (WS-22) and Kohral
+image (WS-23) are not implemented — `kevin serve --kohral` says so and exits —
+and nothing is published to crates.io (every crate is `publish = false`).
 
 [Unreleased]: https://github.com/Ligerian-labs/kevin/commits/main

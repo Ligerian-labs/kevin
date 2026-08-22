@@ -10,6 +10,8 @@ This directory holds the artefacts for the three topologies in
 |---|---|
 | `compose/postgres.yml` | Postgres 16 + pgvector for development and tests (`just db-up`). |
 | `Dockerfile` | The **Kevin daemon** image: multi-stage build, `kevin serve`, no agent CLIs. |
+| `systemd/kevin.service` | The VPS unit: non-root user, `EnvironmentFile`, `SIGHUP` reload, sandbox directives. See [`systemd/README.md`](./systemd/README.md). |
+| `scripts/backup-restore-test.sh` | Exercises the backup procedure: `pg_dump` → restore into a scratch database → row counts → `kevin db rebuild-projection --all` → compare. |
 | `kohral/` | The Kohral image and stack (WS-23) — bundles the agent CLIs. Not in this repository yet. |
 
 ## Which topology?
@@ -35,25 +37,13 @@ a public interface.
 Same binary, run as a long-lived daemon under systemd, with clients (`kevin
 tui --server …`, `kevin runs …`) talking to it over HTTP.
 
-```ini
-# /etc/systemd/system/kevin.service
-[Unit]
-Description=Kevin agent runtime
-After=network-online.target postgresql.service
+The unit is [`systemd/kevin.service`](./systemd/kevin.service); installation,
+hardening rationale, reverse-proxy configuration and the token-rotation and
+upgrade procedures are in [`systemd/README.md`](./systemd/README.md).
 
-[Service]
-User=kevin
-Environment=KEVIN__KEVIN__PROFILE=server
-Environment=KEVIN__SERVER__BIND=127.0.0.1:7777
-EnvironmentFile=/etc/kevin/env          # KEVIN__DATABASE__URL lives here, mode 0600
-ExecStartPre=/usr/local/bin/kevin db migrate
-ExecStart=/usr/local/bin/kevin serve
-Restart=on-failure
-TimeoutStopSec=60                       # > kevin.shutdown_grace_period (30s)
-StateDirectory=kevin                    # /var/lib/kevin = kevin.data_dir
-
-[Install]
-WantedBy=multi-user.target
+```bash
+sudo install -m 0644 deploy/systemd/kevin.service /etc/systemd/system/kevin.service
+sudo systemctl daemon-reload && sudo systemctl enable --now kevin
 ```
 
 Notes that matter on a VPS:
@@ -128,6 +118,38 @@ Nothing else listens. Postgres is a client connection, not a served port.
 |---|---|---|
 | `/var/lib/kevin` (`kevin.data_dir`) | Artifact copies, worker transcripts, the embedding-model cache. | Recoverable: transcripts and artifact copies are convenience, the model re-downloads on first use. Back it up if you care about transcripts beyond `retention.transcript_days`. |
 | Postgres data | Events, read models, memory, route scores, evaluations. | **Not recoverable.** Postgres is the source of truth — back it up with `pg_dump --format=custom` or platform snapshots. Restore procedure: restore the dump, `kevin db status`, `kevin db rebuild-projection --all`, start. |
+
+### Backup and restore
+
+```bash
+pg_dump --format=custom --no-owner --file=kevin-$(date +%F).dump "$KEVIN__DATABASE__URL"
+```
+
+Restoring is the reverse plus a projection rebuild, because the read models are
+derived state and a dump taken mid-projection can lag the events:
+
+```bash
+createdb kevin && psql -d kevin -c 'CREATE EXTENSION IF NOT EXISTS vector'
+pg_restore --no-owner --dbname=kevin kevin-2026-01-01.dump
+kevin db status                       # every migration applied, no checksum mismatch
+kevin db rebuild-projection --all     # read models re-derived from core.events
+systemctl start kevin && curl -sf localhost:7777/readyz
+```
+
+Rehearse it — a backup nobody has restored is a hypothesis.
+[`scripts/backup-restore-test.sh`](./scripts/backup-restore-test.sh) does the
+whole loop against a scratch database and fails if the row counts or the
+rebuilt projections differ:
+
+```bash
+DATABASE_URL=postgres://kevin:kevin@localhost:5433/kevin \
+  deploy/scripts/backup-restore-test.sh
+```
+
+`data_dir` is not part of the backup by design: transcripts and artifact copies
+age out with `[retention]` (`kevin db prune`) and the embedding model
+re-downloads. Copy it separately if transcripts have to outlive
+`retention.transcript_days`.
 
 The image declares `VOLUME ["/var/lib/kevin"]`, so an anonymous volume appears
 if you do not mount a named one. Mount one deliberately: the embedding model is

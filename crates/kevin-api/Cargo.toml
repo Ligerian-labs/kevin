@@ -32,6 +32,7 @@ kevin-store = { workspace = true, optional = true }
 kevin-bus = { workspace = true, optional = true }
 kevin-worker = { workspace = true, optional = true }
 kevin-memory = { workspace = true, optional = true }
+kevin-telemetry = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 metrics = { workspace = true, optional = true }
@@ -68,6 +69,7 @@ server = [
   "dep:kevin-bus",
   "dep:kevin-worker",
   "dep:kevin-memory",
+  "dep:kevin-telemetry",
   "dep:async-trait",
   "dep:axum",
   "dep:metrics",
