@@ -99,12 +99,10 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
     let cases: &[&[&str]] = &[
         // `db` (WS-03), `config show` (WS-02), `workers doctor` (WS-05),
         // `routes` (WS-09), `lessons`/`memory` (WS-18), `proposals` (WS-19),
-        // `tui` (WS-17), `serve` (WS-20) and `run`/`runs`/`tasks`/`questions`/
+        // `tui` (WS-17), `serve` incl. `--kohral` (WS-20 + WS-22),
+        // `kohral conformance` (WS-22) and `run`/`runs`/`tasks`/`questions`/
         // `answer`/`approve`/`reject`/`cost` (WS-12) are implemented.
         &["eval", "rerun", "01910000-0000-7000-8000-000000000001"],
-        &["kohral", "conformance", "--phase", "basic"],
-        // `--kohral` is the one part of `serve` still waiting for WS-22.
-        &["serve", "--kohral"],
     ];
     for args in cases {
         kevin()

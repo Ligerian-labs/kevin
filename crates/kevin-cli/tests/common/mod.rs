@@ -233,6 +233,10 @@ impl Harness {
         std::fs::write(&script, scenario).expect("write scenario");
         let token = "ws20-test-token-aaaaaaaaaaaaaaaaaaaa".to_owned();
         std::fs::write(root.join("token"), format!("{token}\n")).expect("write token");
+        // The Kohral listener has a token of its own (`plan/07` §Authentication:
+        // the two surfaces never share one), so the harness writes both.
+        std::fs::write(root.join("kohral-token"), format!("{KOHRAL_TOKEN}\n"))
+            .expect("write kohral token");
         let config = root.join("kevin.toml");
         std::fs::write(&config, config_toml(root, url, &script)).expect("write config");
         Self {
@@ -262,6 +266,17 @@ impl Harness {
     /// The current bearer token.
     pub fn token(&self) -> &str {
         &self.token
+    }
+
+    /// `kohral.token_file`.
+    pub fn kohral_token_file(&self) -> PathBuf {
+        self.tmp.path().join("kohral-token")
+    }
+
+    /// The bearer token of the Kohral listener.
+    #[allow(clippy::unused_self)]
+    pub fn kohral_token(&self) -> &'static str {
+        KOHRAL_TOKEN
     }
 
     /// `kevin.data_dir`.
@@ -495,6 +510,11 @@ auth_token_file = "{token_file}"
 docs = false
 token_grace = "5m"
 
+[kohral]
+enabled = false
+bind = "127.0.0.1:0"
+token_file = "{kohral_token_file}"
+
 [budget]
 default_run_usd = 100.0
 default_task_usd = 50.0
@@ -559,6 +579,7 @@ policy = "fixed"
         url = url,
         script = script.display(),
         token_file = root.join("token").display(),
+        kohral_token_file = root.join("kohral-token").display(),
     );
     for kind in [
         "implement",
@@ -583,6 +604,10 @@ policy = "fixed"
 const LISTENING: &str = "kevin serve listening on ";
 /// Marker `kevin serve` prints when `telemetry.metrics_bind` is set.
 const METRICS: &str = "metrics on ";
+/// Prefix of the line `kevin serve --kohral` prints for its second listener.
+const KOHRAL: &str = "kohral runtime contract on ";
+/// The token `kohral.token_file` holds in every harness.
+pub const KOHRAL_TOKEN: &str = "ws22-kohral-token-bbbbbbbbbbbbbbbbbbbb";
 
 /// A running `kevin serve`, with the addresses it printed on startup.
 pub struct Daemon {
@@ -590,6 +615,7 @@ pub struct Daemon {
     pid: u32,
     api: String,
     metrics: Option<String>,
+    kohral: Option<String>,
 }
 
 impl std::fmt::Debug for Daemon {
@@ -598,6 +624,7 @@ impl std::fmt::Debug for Daemon {
             .field("pid", &self.pid)
             .field("api", &self.api)
             .field("metrics", &self.metrics)
+            .field("kohral", &self.kohral)
             .finish_non_exhaustive()
     }
 }
@@ -634,6 +661,7 @@ impl Harness {
         let mut lines = BufReader::new(stdout).lines();
         let mut api = None;
         let mut metrics = None;
+        let mut kohral = None;
         let deadline = tokio::time::Instant::now() + Duration::from_secs(90);
         while api.is_none() {
             let next = tokio::time::timeout_at(deadline, lines.next_line())
@@ -647,6 +675,8 @@ impl Harness {
                 api = Some(rest.trim().to_owned());
             } else if let Some(rest) = line.strip_prefix(METRICS) {
                 metrics = Some(rest.trim().to_owned());
+            } else if let Some(rest) = line.strip_prefix(KOHRAL) {
+                kohral = Some(rest.trim().to_owned());
             }
         }
         // Keep draining, or the daemon blocks on a full pipe.
@@ -657,6 +687,7 @@ impl Harness {
             pid,
             api: api.expect("the listening line"),
             metrics,
+            kohral,
         }
     }
 }
@@ -670,6 +701,11 @@ impl Daemon {
     /// URL of the Prometheus endpoint (`telemetry.metrics_bind`), if enabled.
     pub fn metrics_url(&self) -> Option<&str> {
         self.metrics.as_deref()
+    }
+
+    /// Base URL of the Kohral runtime contract (`kohral.bind`), if `--kohral`.
+    pub fn kohral_url(&self) -> Option<&str> {
+        self.kohral.as_deref()
     }
 
     /// Process id, for signalling.
