@@ -176,17 +176,25 @@ impl Decision {
         }
     }
 
-    /// The command this decision issues.
+    /// The command this decision issues. `note` is the operator's reason and
+    /// is recorded on the event (`plan/07` §API `{note?}`).
     #[must_use]
-    pub fn command(self, proposal_id: ProposalId, by: &str) -> EvaluationCommand {
+    pub fn command(
+        self,
+        proposal_id: ProposalId,
+        by: &str,
+        note: Option<String>,
+    ) -> EvaluationCommand {
         match self {
             Decision::Accept => EvaluationCommand::AcceptProposal(AcceptProposal {
                 proposal_id,
                 by: by.to_owned(),
+                note,
             }),
             Decision::Reject => EvaluationCommand::RejectProposal(RejectProposal {
                 proposal_id,
                 by: by.to_owned(),
+                note,
             }),
         }
     }
@@ -221,6 +229,7 @@ pub trait EvaluationRepo: Send + Sync + std::fmt::Debug {
         proposal_id: ProposalId,
         decision: Decision,
         by: &str,
+        note: Option<String>,
     ) -> Result<ProposalRow>;
 }
 
@@ -416,13 +425,14 @@ impl EvaluationRepo for PgEvaluationRepo {
         proposal_id: ProposalId,
         decision: Decision,
         by: &str,
+        note: Option<String>,
     ) -> Result<ProposalRow> {
         let row = self
             .proposal(proposal_id)
             .await?
             .ok_or(EvaluatorError::ProposalNotFound(proposal_id))?;
         let (aggregate, version) = self.load(row.evaluation_id).await?;
-        let produced = aggregate.handle(&decision.command(proposal_id, by))?;
+        let produced = aggregate.handle(&decision.command(proposal_id, by, note))?;
         let [event] = produced.as_slice() else {
             return Err(EvaluatorError::store("decision produced no event"));
         };
@@ -740,6 +750,7 @@ impl EvaluationRepo for InMemoryEvaluationRepo {
         proposal_id: ProposalId,
         decision: Decision,
         by: &str,
+        note: Option<String>,
     ) -> Result<ProposalRow> {
         let mut state = self.state.lock().expect("repo lock");
         let (record, aggregate) = state
@@ -747,7 +758,7 @@ impl EvaluationRepo for InMemoryEvaluationRepo {
             .values_mut()
             .find(|(record, _)| record.proposals.iter().any(|p| p.id == proposal_id))
             .ok_or(EvaluatorError::ProposalNotFound(proposal_id))?;
-        let produced = aggregate.handle(&decision.command(proposal_id, by))?;
+        let produced = aggregate.handle(&decision.command(proposal_id, by, note))?;
         for event in &produced {
             aggregate.apply(event);
         }
@@ -816,7 +827,10 @@ mod tests {
             1
         );
 
-        let row = repo.decide(p.id, Decision::Accept, "vale").await.unwrap();
+        let row = repo
+            .decide(p.id, Decision::Accept, "vale", None)
+            .await
+            .unwrap();
         assert_eq!(row.status, ProposalStatus::Accepted);
         assert_eq!(row.decided_by.as_deref(), Some("vale"));
         assert!(
@@ -827,6 +841,10 @@ mod tests {
         );
         assert_eq!(repo.events().len(), 2);
         // A second decision is refused by the aggregate.
-        assert!(repo.decide(p.id, Decision::Reject, "vale").await.is_err());
+        assert!(
+            repo.decide(p.id, Decision::Reject, "vale", None)
+                .await
+                .is_err()
+        );
     }
 }

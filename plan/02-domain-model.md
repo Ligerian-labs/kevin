@@ -182,14 +182,23 @@ Global ordering: `core.events.position BIGSERIAL`. Per-stream ordering:
 | `question.answered` | question | answer, answered_by |
 | `question.expired` | question | applied_default: bool |
 | `evaluation.recorded` | evaluation | subject, rubric_id, scores[], overall, verdict, lessons[], proposals[] |
-| `evaluation.proposal_accepted` / `_rejected` | evaluation | proposal_id, by |
+| `evaluation.proposal_accepted` / `_rejected` | evaluation | proposal_id, by, note? *(v2)* |
 | `routing.score_updated` | route_score | task_kind, alias, stats after |
 | `memory.item_stored` | memory_item | kind, content, tags, source |
 | `memory.item_superseded` / `memory.item_forgotten` | memory_item | — |
 
 Events are past tense, context-qualified, additive. A breaking payload change
 bumps `schema_version` and the store keeps an upcaster registry
-(`kevin-store::upcast`).
+(`kevin-store::upcast`). `Upcasters::domain()` is the registry
+`PgEventStore::new` installs; every version listed above as *(vN)* has an entry
+in it.
+
+Schema versions in use:
+
+| Event | Version | Change |
+|---|---|---|
+| `evaluation.proposal_accepted` / `_rejected` | 2 | `note?` added: the operator's reason for the decision, so `kevin proposals accept\|reject --note` and `POST /api/v1/proposals/{id}/accept\|reject {note?}` ([07](./07-api-and-tui.md)) persist it instead of only printing it. v1 payloads upcast to `note: null`. |
+| everything else | 1 | — |
 
 ## Process manager: `RunSaga`
 

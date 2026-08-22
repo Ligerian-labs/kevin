@@ -298,7 +298,10 @@ async fn ac_ws19_5_accepting_a_proposal_emits_the_event_and_applies_routing() {
         .expect("prompt proposal");
 
     // Routing: event + applied.
-    let accepted = inbox.accept(routing.id, "vale").await.expect("accepted");
+    let accepted = inbox
+        .accept(routing.id, "vale", Some("looks right".to_owned()))
+        .await
+        .expect("accepted");
     assert_eq!(accepted.proposal.status, ProposalStatus::Accepted);
     assert!(accepted.applied, "a routing directive is applied on accept");
     assert!(accepted.manual.is_none());
@@ -308,20 +311,25 @@ async fn ac_ws19_5_accepting_a_proposal_emits_the_event_and_applies_routing() {
     assert!(
         fx.repo.events().iter().any(|e| matches!(
             e,
-            kevin_domain::EvaluationEvent::ProposalAccepted { proposal_id, by }
-                if *proposal_id == routing.id && by == "vale"
+            kevin_domain::EvaluationEvent::ProposalAccepted { proposal_id, by, note }
+                if *proposal_id == routing.id
+                    && by == "vale"
+                    && note.as_deref() == Some("looks right")
         )),
-        "evaluation.proposal_accepted was emitted"
+        "evaluation.proposal_accepted was emitted, with the operator note"
     );
 
     // Prompt: event, never applied.
-    let accepted = inbox.accept(prompt.id, "vale").await.expect("accepted");
+    let accepted = inbox
+        .accept(prompt.id, "vale", None)
+        .await
+        .expect("accepted");
     assert!(!accepted.applied);
     assert!(accepted.manual.is_some());
     assert_eq!(router.len(), 1, "no route outcome from a prompt proposal");
 
     // A decided proposal cannot be decided again.
-    assert!(inbox.reject(prompt.id, "vale").await.is_err());
+    assert!(inbox.reject(prompt.id, "vale", None).await.is_err());
     assert!(
         inbox
             .list(Some(ProposalStatus::Proposed), 50)

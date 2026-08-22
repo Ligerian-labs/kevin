@@ -86,6 +86,10 @@ pub struct AcceptProposal {
     pub proposal_id: ProposalId,
     /// Who.
     pub by: String,
+    /// Why, in the operator's words. Recorded on the event so the decision is
+    /// auditable months later (`plan/07` §API: `{note?}` on both verbs).
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 /// A human rejects a proposal (`evaluation.proposal_rejected`).
@@ -95,6 +99,9 @@ pub struct RejectProposal {
     pub proposal_id: ProposalId,
     /// Who.
     pub by: String,
+    /// Why the proposal was turned down (`kevin proposals reject --note`).
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 /// Every command the [`Evaluation`] aggregate handles.
@@ -177,6 +184,9 @@ pub enum EvaluationEvent {
         proposal_id: ProposalId,
         /// Who.
         by: String,
+        /// The operator's note (schema v2; `null` in v1 payloads).
+        #[serde(default)]
+        note: Option<String>,
     },
     /// `evaluation.proposal_rejected`
     #[serde(rename = "evaluation.proposal_rejected")]
@@ -185,6 +195,9 @@ pub enum EvaluationEvent {
         proposal_id: ProposalId,
         /// Who.
         by: String,
+        /// The operator's note (schema v2; `null` in v1 payloads).
+        #[serde(default)]
+        note: Option<String>,
     },
 }
 
@@ -207,7 +220,14 @@ impl EventMeta for EvaluationEvent {
     }
 
     fn schema_version(&self) -> u16 {
-        1
+        match self {
+            EvaluationEvent::Recorded { .. } => 1,
+            // v2 added `note`; `kevin_store::Upcasters::domain()` lifts stored
+            // v1 payloads by inserting `note: null`.
+            EvaluationEvent::ProposalAccepted { .. } | EvaluationEvent::ProposalRejected { .. } => {
+                2
+            }
+        }
     }
 
     fn aggregate_type(&self) -> &'static str {
@@ -399,6 +419,7 @@ impl Aggregate for Evaluation {
                 Ok(vec![EvaluationEvent::ProposalAccepted {
                     proposal_id: c.proposal_id,
                     by: c.by.clone(),
+                    note: c.note.clone(),
                 }])
             }
             EvaluationCommand::RejectProposal(c) => {
@@ -407,6 +428,7 @@ impl Aggregate for Evaluation {
                 Ok(vec![EvaluationEvent::ProposalRejected {
                     proposal_id: c.proposal_id,
                     by: c.by.clone(),
+                    note: c.note.clone(),
                 }])
             }
         }

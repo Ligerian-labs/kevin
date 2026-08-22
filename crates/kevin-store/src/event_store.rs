@@ -181,10 +181,11 @@ pub struct PgEventStore {
 }
 
 impl PgEventStore {
-    /// Creates a store without upcasters.
+    /// Creates a store with the domain upcaster registry
+    /// ([`Upcasters::domain`]), so every read returns the latest payload shape.
     #[must_use]
     pub fn new(pool: PgPool) -> Self {
-        Self::with_upcasters(pool, Upcasters::new())
+        Self::with_upcasters(pool, Upcasters::domain())
     }
 
     /// Creates a store that applies `upcasters` to every event it reads.

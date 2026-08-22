@@ -434,6 +434,29 @@ impl RunSupervisor {
         }
     }
 
+    /// [`RunSupervisor::abort`], but waits until the actor tasks have actually
+    /// stopped.
+    ///
+    /// `JoinHandle::abort` only *requests* cancellation: the task keeps running
+    /// until its next await point, and may append one more event on the way.
+    /// A crash simulation that does not wait therefore races the reboot it is
+    /// simulating — under load the "dead" actor can write after the new one
+    /// started. Awaiting the handles makes the crash a hard edge.
+    pub async fn abort_and_join(&self) {
+        let handles: Vec<ActorHandle> = self
+            .lock()
+            .drain()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|(_, h)| h)
+            .collect();
+        for handle in handles {
+            handle.join.abort();
+            // An aborted handle resolves as soon as the task is really gone.
+            let _ = handle.join.await;
+        }
+    }
+
     /// Terminates every actor: running attempts are failed `runtime_shutdown`.
     pub async fn shutdown(&self) {
         self.broadcast(|| SagaInput::Shutdown).await;

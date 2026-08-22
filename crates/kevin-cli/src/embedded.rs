@@ -793,3 +793,101 @@ pub fn server_mode_unsupported(url: &str) -> anyhow::Error {
 pub async fn open_backend(ctx: &crate::Ctx) -> anyhow::Result<Backend> {
     Backend::open(Arc::new(resolve_embedded(ctx)?)).await
 }
+
+// ---------------------------------------------------------------------------
+// The proposals inbox behind the HTTP API
+// ---------------------------------------------------------------------------
+
+/// [`kevin_api::port::EvaluatorPort`] over [`kevin_evaluator::Proposals`].
+///
+/// `GET /api/v1/proposals` and the accept/reject verbs are part of the API
+/// surface (`plan/07-api-and-tui.md` §Endpoints) and back the TUI's
+/// "Lessons & proposals" screen. Without this adapter `AppState` has no
+/// evaluator port and all three answer `runtime_unavailable`, so the inbox is
+/// reachable only from the CLI.
+///
+/// The adapter lives here rather than in `kevin-api` because the inbox is a
+/// `kevin-evaluator` type and `kevin-api` must not depend on it
+/// (`plan/01-architecture.md` §Dependency direction); `kevin-cli` is the crate
+/// that wires everything.
+pub struct InboxEvaluator {
+    inbox: Arc<kevin_evaluator::Proposals>,
+}
+
+impl std::fmt::Debug for InboxEvaluator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InboxEvaluator").finish_non_exhaustive()
+    }
+}
+
+impl InboxEvaluator {
+    /// Wraps a proposals inbox.
+    #[must_use]
+    pub const fn new(inbox: Arc<kevin_evaluator::Proposals>) -> Self {
+        Self { inbox }
+    }
+}
+
+fn proposal_dto(row: &kevin_evaluator::ProposalRow) -> kevin_api::dto::ProposalDto {
+    kevin_api::dto::ProposalDto {
+        id: row.id,
+        evaluation_id: row.evaluation_id,
+        kind: kevin_evaluator::repo::kind_str(row.kind).to_owned(),
+        body: row.body.clone(),
+        status: kevin_evaluator::repo::status_str(row.status).to_owned(),
+        created_at: row.created_at,
+    }
+}
+
+#[async_trait]
+impl kevin_api::port::EvaluatorPort for InboxEvaluator {
+    async fn proposals(
+        &self,
+        query: &kevin_api::dto::ProposalsQuery,
+    ) -> kevin_api::port::PortResult<kevin_api::dto::Page<kevin_api::dto::ProposalDto>> {
+        let status = query
+            .status
+            .as_deref()
+            .map(kevin_evaluator::repo::parse_status)
+            .transpose()
+            .map_err(|e| kevin_api::port::RuntimeError::Internal(e.to_string()))?;
+        let rows = self
+            .inbox
+            .list(status, query.limit.unwrap_or(50))
+            .await
+            .map_err(|e| kevin_api::port::RuntimeError::Storage(e.to_string()))?;
+        Ok(kevin_api::dto::Page::new(
+            rows.iter().map(proposal_dto).collect(),
+        ))
+    }
+
+    async fn decide_proposal(
+        &self,
+        proposal_id: kevin_domain::ProposalId,
+        accept: bool,
+        note: Option<String>,
+        ctx: kevin_api::port::CommandCtx,
+    ) -> kevin_api::port::PortResult<kevin_api::dto::ProposalDto> {
+        let by = match &ctx.actor {
+            kevin_domain::Actor::User { name } => name.clone(),
+            kevin_domain::Actor::System { component } => component.clone(),
+            kevin_domain::Actor::Worker { kind } => kind.to_string(),
+            kevin_domain::Actor::Kohral { agent_id } => agent_id.clone(),
+        };
+        let row = if accept {
+            self.inbox
+                .accept(proposal_id, &by, note)
+                .await
+                .map(|outcome| outcome.proposal)
+        } else {
+            self.inbox.reject(proposal_id, &by, note).await
+        };
+        match row {
+            Ok(row) => Ok(proposal_dto(&row)),
+            Err(kevin_evaluator::EvaluatorError::ProposalNotFound(id)) => {
+                Err(kevin_api::port::RuntimeError::ProposalNotFound(id))
+            }
+            Err(err) => Err(kevin_api::port::RuntimeError::Storage(err.to_string())),
+        }
+    }
+}

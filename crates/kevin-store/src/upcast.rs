@@ -39,6 +39,28 @@ impl Upcasters {
         Self::default()
     }
 
+    /// Every upcaster the domain event catalog needs today.
+    ///
+    /// This is what [`crate::PgEventStore::new`] installs, so a stored event
+    /// is read in its latest shape whatever wrote it. One entry per payload
+    /// change, in the order the versions were introduced:
+    ///
+    /// - `evaluation.proposal_accepted` / `_rejected` **v1 → v2**: `note` was
+    ///   added (the operator's reason for the decision). v1 payloads never had
+    ///   one, so they upcast to `note: null`.
+    #[must_use]
+    pub fn domain() -> Self {
+        let add_null_note = |mut payload: Value| {
+            if let Value::Object(map) = &mut payload {
+                map.entry("note").or_insert(Value::Null);
+            }
+            payload
+        };
+        Self::new()
+            .with("evaluation.proposal_accepted", 1, add_null_note)
+            .with("evaluation.proposal_rejected", 1, add_null_note)
+    }
+
     /// Registers the step lifting `event_type` payloads from `from_version` to
     /// `from_version + 1`. Re-registering the same key replaces the step.
     pub fn register<F>(

@@ -465,6 +465,19 @@ fn app_state(runtime: &EmbeddedRuntime, resolved: &Arc<Resolved>) -> anyhow::Res
     if let Some(memory) = runtime.memory_store() {
         builder = builder.memory(Arc::new(StoreMemory::new(Arc::clone(memory))));
     }
+    // The proposals inbox: without it `GET /api/v1/proposals` and the
+    // accept/reject verbs answer `runtime_unavailable`, and the TUI's
+    // "Lessons & proposals" screen has nothing to show (`plan/07` §Endpoints).
+    if config.evaluation.enabled {
+        let scores = Arc::new(PgRouteScoreRepo::new(backend.pool().clone()));
+        let router = Arc::new(kevin_router::Router::from_config(config, scores));
+        let repo = Arc::new(kevin_evaluator::PgEvaluationRepo::new(
+            backend.pool().clone(),
+            backend.publishing_store(),
+        ));
+        let inbox = Arc::new(kevin_evaluator::Proposals::new(repo).with_router(router));
+        builder = builder.evaluator(Arc::new(crate::embedded::InboxEvaluator::new(inbox)));
+    }
     Ok(builder.build())
 }
 

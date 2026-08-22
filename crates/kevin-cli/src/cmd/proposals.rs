@@ -79,13 +79,16 @@ pub enum Cmd {
     Accept {
         /// Proposal id.
         id: ProposalId,
+        /// Why, recorded on `evaluation.proposal_accepted`.
+        #[arg(long, value_name = "TEXT")]
+        note: Option<String>,
     },
     /// Reject a proposal.
     Reject {
         /// Proposal id.
         id: ProposalId,
-        /// Note printed with the rejection (not persisted in v1: the
-        /// `evaluation.proposal_rejected` event carries no note field).
+        /// Why, recorded on `evaluation.proposal_rejected` so the decision is
+        /// auditable later.
         #[arg(long, value_name = "TEXT")]
         note: Option<String>,
     },
@@ -113,10 +116,10 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
             let row = inbox.get(id).await.map_err(|e| evaluator_err(&e))?;
             print_show(&row, ctx);
         }
-        Cmd::Accept { id } => {
+        Cmd::Accept { id, note } => {
             let who = whoami();
             let outcome = inbox
-                .accept(id, &who)
+                .accept(id, &who, note.clone())
                 .await
                 .map_err(|e| evaluator_err(&e))?;
             if ctx.global.json {
@@ -126,6 +129,7 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
                         "proposal": dto(&outcome.proposal),
                         "applied": outcome.applied,
                         "manual": outcome.manual,
+                        "note": note,
                     })
                 );
             } else {
@@ -140,7 +144,10 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
         }
         Cmd::Reject { id, note } => {
             let who = whoami();
-            let row = inbox.reject(id, &who).await.map_err(|e| evaluator_err(&e))?;
+            let row = inbox
+                .reject(id, &who, note.clone())
+                .await
+                .map_err(|e| evaluator_err(&e))?;
             if ctx.global.json {
                 println!(
                     "{}",

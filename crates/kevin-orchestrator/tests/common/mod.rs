@@ -39,7 +39,25 @@ use kevin_worker::{SandboxPolicy, Worker};
 use tempfile::TempDir;
 
 /// How long a scenario waits for the event it expects.
-pub const WAIT: Duration = Duration::from_secs(20);
+///
+/// These scenarios drive a real engine over a real Postgres, so the deadline
+/// has to survive a loaded machine: nextest runs the whole workspace in
+/// parallel and several agents share one database server. 20 s was enough on
+/// an idle laptop and produced false failures everywhere else. Raise it
+/// further with `KEVIN_TEST_WAIT_SECS` on very slow hardware.
+///
+/// A deadline only decides *when to give up*; no assertion depends on it, so
+/// a longer one cannot hide a bug — it only stops the suite reporting one that
+/// is not there.
+pub fn wait_timeout() -> Duration {
+    std::env::var("KEVIN_TEST_WAIT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .map_or(DEFAULT_WAIT, Duration::from_secs)
+}
+
+/// Default of [`wait_timeout`].
+const DEFAULT_WAIT: Duration = Duration::from_secs(90);
 /// Polling interval of [`Harness::wait_until`].
 const POLL: Duration = Duration::from_millis(15);
 
@@ -341,11 +359,14 @@ impl Harness {
         }
     }
 
-    /// Kills the engine without recording anything (crash simulation), then
-    /// gives the aborted tasks a moment to actually stop.
+    /// Kills the engine without recording anything (crash simulation).
+    ///
+    /// Waits for the aborted actor tasks to have really stopped instead of
+    /// sleeping: a fixed pause races the reboot on a loaded machine, and the
+    /// "dead" engine appending one more event after the new one booted is
+    /// exactly the corruption these scenarios are meant to rule out.
     pub async fn crash(&self) {
-        self.handle.abort();
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        self.handle.abort_and_join().await;
     }
 
     /// Boots a fresh engine over the same store — the restart path.
@@ -417,7 +438,7 @@ impl Harness {
         label: &str,
         pred: impl Fn(&[StoredEvent]) -> bool,
     ) -> Vec<StoredEvent> {
-        let deadline = tokio::time::Instant::now() + WAIT;
+        let deadline = tokio::time::Instant::now() + wait_timeout();
         let mut last = Vec::new();
         while tokio::time::Instant::now() < deadline {
             last = self.events(run_id).await;
@@ -571,9 +592,9 @@ pub fn count(events: &[StoredEvent], event_type: &str) -> usize {
         .count()
 }
 
-/// Polls `check` until it holds; panics after [`WAIT`].
+/// Polls `check` until it holds; panics after [`wait_timeout`].
 pub async fn eventually(label: &str, mut check: impl FnMut() -> bool) {
-    let deadline = tokio::time::Instant::now() + WAIT;
+    let deadline = tokio::time::Instant::now() + wait_timeout();
     while tokio::time::Instant::now() < deadline {
         if check() {
             return;

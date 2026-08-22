@@ -371,7 +371,11 @@ async fn ac_ws08_8_dag_parallelism_respected() {
             .with_understanding(understanding("four things"))
             .with_plan(plan_of(4)),
     );
-    let scenario = Scenario::replying("done").with_default(Rule::replying("done").delay_ms(120));
+    // The delay has to outlast a scheduling round on a loaded machine, or the
+    // first attempt can finish before the second starts and the fan-out
+    // assertion below fails for a reason that has nothing to do with the
+    // scheduler. It does not weaken the `<= 2` bound, which is the contract.
+    let scenario = Scenario::replying("done").with_default(Rule::replying("done").delay_ms(500));
     let harness = Harness::boot(Setup::new().roles(roles).scenario(scenario)).await;
     let budget = kevin_domain::Budget {
         max_parallel: 2,
@@ -754,7 +758,12 @@ async fn ac_ws08_16_shutdown_drain() {
             .with_understanding(understanding("two slow things"))
             .with_plan(plan_of(2)),
     );
-    let scenario = Scenario::replying("done").with_default(Rule::replying("done").delay_ms(3_000));
+    // The attempt holds instead of taking "long enough": with a fixed delay a
+    // loaded machine can finish it before the shutdown lands, and the
+    // `runtime_shutdown` assertion below then fails on a race rather than on
+    // the behaviour under test. Holding makes cancellation the *only* way this
+    // attempt can end.
+    let scenario = Scenario::replying("done").with_default(Rule::default().hold());
     let harness = Harness::boot(Setup::new().roles(roles).scenario(scenario)).await;
     let budget = kevin_domain::Budget {
         max_parallel: 1,
@@ -767,7 +776,9 @@ async fn ac_ws08_16_shutdown_drain() {
 
     harness.handle.drain().await;
     assert!(!harness.handle.is_admitting(), "drain stops admission");
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // Several saga ticks: long enough for the scheduler to have tried, derived
+    // from the harness' tick so it scales with the configuration.
+    tokio::time::sleep(harness.tick * 8).await;
     let during_drain = harness.events(run).await;
     assert_eq!(
         count(&during_drain, "task.attempt_started"),

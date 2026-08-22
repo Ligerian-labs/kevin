@@ -1339,6 +1339,7 @@ pub mod evaluation {
         AcceptProposal {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("routing looks right".to_owned()),
         }
     }
 
@@ -1348,6 +1349,7 @@ pub mod evaluation {
         RejectProposal {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("we already tried this alias".to_owned()),
         }
     }
 
@@ -1375,6 +1377,7 @@ pub mod evaluation {
         EvaluationEvent::ProposalAccepted {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("routing looks right".to_owned()),
         }
     }
 
@@ -1384,6 +1387,7 @@ pub mod evaluation {
         EvaluationEvent::ProposalRejected {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("we already tried this alias".to_owned()),
         }
     }
 }
