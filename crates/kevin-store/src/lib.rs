@@ -13,6 +13,9 @@
 //! - [`event_store`] — the frozen [`EventStore`] trait and [`PgEventStore`]:
 //!   append with optimistic concurrency, stream and global reads, position
 //!   watch, transactional outbox rows and `pg_notify('kevin_events', …)`.
+//!   [`PgEventStore`] also implements `kevin_bus::EventSource`, so
+//!   `PgNotifyBus` can read every event back by global position and a second
+//!   process can attach to a running instance.
 //! - [`outbox`] — [`Outbox`] relay (at-least-once, crash-safe).
 //! - [`command_log`] — [`CommandLog`] idempotent command replay.
 //! - [`checkpoints`] — [`Checkpoints`] for projections.

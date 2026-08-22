@@ -4,6 +4,7 @@ expression: value
 ---
 {
   "by": "valentin",
+  "note": "routing looks right",
   "proposal_id": "01910000-0000-7000-8000-000000000f01",
-  "type": "evaluation.proposal_rejected"
+  "type": "evaluation.proposal_accepted"
 }

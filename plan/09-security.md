@@ -216,6 +216,11 @@ payloads. It is **allow-list by structure, deny-list by pattern**:
 
 ## Security checklist per workstream
 
+Walked crate by crate in WS-25; the results — what is verified, what was fixed
+and what is still a gap, each with the test that proves it — are recorded in
+[`docs/security-checklist.md`](../docs/security-checklist.md). Update that
+document whenever a row below changes state.
+
 | Workstream | Must verify before PR |
 |---|---|
 | kevin-config | project-layer restrictions enforced; secrets redacted in `config show`; insecure bind rejected |

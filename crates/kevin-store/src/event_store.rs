@@ -37,6 +37,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use kevin_bus::{BusEvent, EventSource, SourceError};
 use kevin_domain::{Actor, EventEnvelope, EventId};
 use serde_json::Value;
 use sqlx::postgres::PgRow;
@@ -180,10 +181,11 @@ pub struct PgEventStore {
 }
 
 impl PgEventStore {
-    /// Creates a store without upcasters.
+    /// Creates a store with the domain upcaster registry
+    /// ([`Upcasters::domain`]), so every read returns the latest payload shape.
     #[must_use]
     pub fn new(pool: PgPool) -> Self {
-        Self::with_upcasters(pool, Upcasters::new())
+        Self::with_upcasters(pool, Upcasters::domain())
     }
 
     /// Creates a store that applies `upcasters` to every event it reads.
@@ -294,9 +296,17 @@ impl EventStore for PgEventStore {
 
         let mut stored = Vec::with_capacity(events.len());
         let mut version = expected;
+        let redactor = kevin_telemetry::redact::Redactor::global();
         for event in events {
             version += 1;
             let actor = serde_json::to_value(&event.actor)?;
+            // `plan/09-security.md` §Redaction: the event store is a *sink*.
+            // Nothing that reaches `core.events` may carry a credential — the
+            // rows are kept forever and every projection, SSE stream and
+            // transcript view is derived from them, so redacting here covers
+            // all of them at once (T3).
+            let mut payload = event.payload.clone();
+            redactor.redact_value(&mut payload);
             let row = sqlx::query_as::<_, EventRow>(
                 "INSERT INTO core.events (event_id, event_type, schema_version, occurred_at, \
                  aggregate_type, aggregate_id, aggregate_version, correlation_id, causation_id, \
@@ -316,7 +326,7 @@ impl EventStore for PgEventStore {
             .bind(event.correlation_id)
             .bind(event.causation_id)
             .bind(actor)
-            .bind(&event.payload)
+            .bind(&payload)
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| map_unique_violation(e, stream, expected_version, actual))?;
@@ -484,6 +494,33 @@ pub(crate) fn to_i64(value: u64) -> Result<i64, StoreError> {
 #[must_use]
 pub fn parse_notify_payload(payload: &str) -> Option<u64> {
     payload.trim().parse().ok()
+}
+
+/// The store is the bus' source of truth: [`PgNotifyBus`] reads every event
+/// back by global position from here, so `NOTIFY` stays a wake-up hint
+/// (`plan/01-architecture.md` §Event-driven core; `kevin_bus` module docs
+/// name `kevin-store` as the [`EventSource`] implementor).
+///
+/// [`PgNotifyBus`]: kevin_bus::PgNotifyBus
+#[async_trait]
+impl EventSource for PgEventStore {
+    async fn read_all(
+        &self,
+        from_position: u64,
+        limit: usize,
+    ) -> Result<Vec<BusEvent>, SourceError> {
+        let events = EventStore::read_all(self, from_position, limit)
+            .await
+            .map_err(SourceError::new)?;
+        Ok(events
+            .into_iter()
+            .map(|e| BusEvent::new(e.position, e.envelope))
+            .collect())
+    }
+
+    async fn latest_position(&self) -> Result<u64, SourceError> {
+        self.head_position().await.map_err(SourceError::new)
+    }
 }
 
 #[cfg(test)]

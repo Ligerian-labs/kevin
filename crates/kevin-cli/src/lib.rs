@@ -18,6 +18,7 @@ pub mod ctx;
 pub mod embedded;
 pub mod observability;
 pub mod render;
+pub mod secrets;
 pub mod version;
 
 pub use ctx::{Ctx, ExitError, GlobalArgs, exit, not_implemented};

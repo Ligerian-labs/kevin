@@ -176,7 +176,7 @@ async fn start_and_follow(
 
     // Subscribe *before* the command so no event of this run can be missed.
     let stream = backend
-        .bus()
+        .bus_erased()
         .subscribe(SubscriptionFilter::for_run(run_id.as_uuid()).named("kevin-run"));
 
     let by = actor();
@@ -191,6 +191,12 @@ async fn start_and_follow(
                 budget,
                 requested_by: by,
                 auto_approve_plans: auto_approve,
+                // `kevin run --model` pins the *process* configuration
+                // (`pin_model` below), which the embedded runtime owns
+                // exclusively, so no per-run override is needed here. The
+                // field exists for callers that share a runtime — Kohral
+                // (`plan/08` §1.2).
+                role_overrides: kevin_domain::RoleOverrides::new(),
             },
             &cmd_ctx,
         )

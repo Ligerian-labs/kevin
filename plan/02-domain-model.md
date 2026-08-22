@@ -54,6 +54,15 @@ Invariants:
 - Terminal runs reject every command except `Evaluate` (re-evaluation) and
   `Remember`.
 
+`StartRun` carries `role_overrides: BTreeMap<String, ModelAlias>` — a per-run
+override of the `[roles]` table, keyed by role name (`planner`, `clarifier`,
+`judge`, `integrator`, `default`). Empty for a CLI/API run; Kohral fills it from
+the turn's `model` field ([08](./08-kohral-runtime.md) §1.2), which is the only
+way a caller can pick the model for one run without editing configuration. An
+alias that is not in `[models]` fails the run with `no_route`, exactly as a bad
+`roles.*` does. The overrides are recorded on `run.started`, so a restarted
+runtime resumes the run with the model the caller asked for.
+
 Commands (handled by `Run`): `StartRun`, `RecordUnderstanding`, `ProposePlan`,
 `ApprovePlan`, `RejectPlan{feedback}`, `NoteTaskTerminal` (from process manager),
 `MarkIntegrated`, `MarkEvaluated`, `CancelRun`, `FailRun`, `Evaluate` (re-run the
@@ -156,7 +165,7 @@ Global ordering: `core.events.position BIGSERIAL`. Per-stream ordering:
 
 | Event type | Aggregate | Payload (key fields) |
 |---|---|---|
-| `run.started` | run | goal, mode, budget, requested_by, cwd |
+| `run.started` | run | goal, mode, budget, requested_by, cwd, role_overrides |
 | `run.understanding_started` | run | planner_route |
 | `run.understanding_completed` | run | understanding {objective, assumptions[], risks[], success_criteria[], proposed_questions[], context_refs[]} , usage |
 | `run.plan_proposed` | run | plan {tasks[] (TaskSpec + suggested_route), edges[], rationale}, usage |
@@ -182,14 +191,23 @@ Global ordering: `core.events.position BIGSERIAL`. Per-stream ordering:
 | `question.answered` | question | answer, answered_by |
 | `question.expired` | question | applied_default: bool |
 | `evaluation.recorded` | evaluation | subject, rubric_id, scores[], overall, verdict, lessons[], proposals[] |
-| `evaluation.proposal_accepted` / `_rejected` | evaluation | proposal_id, by |
+| `evaluation.proposal_accepted` / `_rejected` | evaluation | proposal_id, by, note? *(v2)* |
 | `routing.score_updated` | route_score | task_kind, alias, stats after |
 | `memory.item_stored` | memory_item | kind, content, tags, source |
 | `memory.item_superseded` / `memory.item_forgotten` | memory_item | — |
 
 Events are past tense, context-qualified, additive. A breaking payload change
 bumps `schema_version` and the store keeps an upcaster registry
-(`kevin-store::upcast`).
+(`kevin-store::upcast`). `Upcasters::domain()` is the registry
+`PgEventStore::new` installs; every version listed above as *(vN)* has an entry
+in it.
+
+Schema versions in use:
+
+| Event | Version | Change |
+|---|---|---|
+| `evaluation.proposal_accepted` / `_rejected` | 2 | `note?` added: the operator's reason for the decision, so `kevin proposals accept\|reject --note` and `POST /api/v1/proposals/{id}/accept\|reject {note?}` ([07](./07-api-and-tui.md)) persist it instead of only printing it. v1 payloads upcast to `note: null`. |
+| everything else | 1 | — |
 
 ## Process manager: `RunSaga`
 

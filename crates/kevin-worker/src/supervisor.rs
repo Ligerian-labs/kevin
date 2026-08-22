@@ -710,7 +710,16 @@ async fn write_transcript(
     let mut writer = BufWriter::new(file);
     let mut hasher = Sha256::new();
     let mut bytes: u64 = 0;
-    while let Some(mut line) = rx.recv().await {
+    // `plan/09-security.md` §Redaction: the transcript is a persisted sink, so
+    // every line goes through the redaction layer and is capped at
+    // `TRANSCRIPT_LINE_CAP_BYTES` before it reaches the disk. A worker that
+    // runs `cat .env` must not leave the credential in `data_dir`.
+    let redactor = kevin_telemetry::redact::Redactor::global();
+    while let Some(line) = rx.recv().await {
+        let mut line = kevin_telemetry::redact::truncate(
+            redactor.redact_str(&line).as_ref(),
+            kevin_telemetry::redact::TRANSCRIPT_LINE_CAP_BYTES,
+        );
         line.push('\n');
         writer.write_all(line.as_bytes()).await?;
         hasher.update(line.as_bytes());

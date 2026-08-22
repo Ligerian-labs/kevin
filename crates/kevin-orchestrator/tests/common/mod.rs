@@ -39,7 +39,25 @@ use kevin_worker::{SandboxPolicy, Worker};
 use tempfile::TempDir;
 
 /// How long a scenario waits for the event it expects.
-pub const WAIT: Duration = Duration::from_secs(20);
+///
+/// These scenarios drive a real engine over a real Postgres, so the deadline
+/// has to survive a loaded machine: nextest runs the whole workspace in
+/// parallel and several agents share one database server. 20 s was enough on
+/// an idle laptop and produced false failures everywhere else. Raise it
+/// further with `KEVIN_TEST_WAIT_SECS` on very slow hardware.
+///
+/// A deadline only decides *when to give up*; no assertion depends on it, so
+/// a longer one cannot hide a bug — it only stops the suite reporting one that
+/// is not there.
+pub fn wait_timeout() -> Duration {
+    std::env::var("KEVIN_TEST_WAIT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .map_or(DEFAULT_WAIT, Duration::from_secs)
+}
+
+/// Default of [`wait_timeout`].
+const DEFAULT_WAIT: Duration = Duration::from_secs(90);
 /// Polling interval of [`Harness::wait_until`].
 const POLL: Duration = Duration::from_millis(15);
 
@@ -172,6 +190,8 @@ pub struct Harness {
     pub task_log: Arc<TaskLog>,
     /// Saga tick interval.
     pub tick: Duration,
+    /// Per-run `[roles]` overrides every [`Harness::start`] passes.
+    pub role_overrides: kevin_domain::RoleOverrides,
     /// Everything needed to build a fresh [`Deps`] (reboot).
     ports: Ports,
     /// The live engine.
@@ -336,16 +356,20 @@ impl Harness {
             workers,
             task_log,
             tick,
+            role_overrides: kevin_domain::RoleOverrides::new(),
             ports,
             handle,
         }
     }
 
-    /// Kills the engine without recording anything (crash simulation), then
-    /// gives the aborted tasks a moment to actually stop.
+    /// Kills the engine without recording anything (crash simulation).
+    ///
+    /// Waits for the aborted actor tasks to have really stopped instead of
+    /// sleeping: a fixed pause races the reboot on a loaded machine, and the
+    /// "dead" engine appending one more event after the new one booted is
+    /// exactly the corruption these scenarios are meant to rule out.
     pub async fn crash(&self) {
-        self.handle.abort();
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        self.handle.abort_and_join().await;
     }
 
     /// Boots a fresh engine over the same store — the restart path.
@@ -376,6 +400,7 @@ impl Harness {
                     budget,
                     requested_by: "tester".to_owned(),
                     auto_approve_plans: false,
+                    role_overrides: self.role_overrides.clone(),
                 },
                 &ctx,
             )
@@ -417,7 +442,7 @@ impl Harness {
         label: &str,
         pred: impl Fn(&[StoredEvent]) -> bool,
     ) -> Vec<StoredEvent> {
-        let deadline = tokio::time::Instant::now() + WAIT;
+        let deadline = tokio::time::Instant::now() + wait_timeout();
         let mut last = Vec::new();
         while tokio::time::Instant::now() < deadline {
             last = self.events(run_id).await;
@@ -571,9 +596,9 @@ pub fn count(events: &[StoredEvent], event_type: &str) -> usize {
         .count()
 }
 
-/// Polls `check` until it holds; panics after [`WAIT`].
+/// Polls `check` until it holds; panics after [`wait_timeout`].
 pub async fn eventually(label: &str, mut check: impl FnMut() -> bool) {
-    let deadline = tokio::time::Instant::now() + WAIT;
+    let deadline = tokio::time::Instant::now() + wait_timeout();
     while tokio::time::Instant::now() < deadline {
         if check() {
             return;
@@ -759,6 +784,113 @@ impl Services {
             budget: default_budget(),
             requested_by: "tester".to_owned(),
             auto_approve_plans: false,
+            role_overrides: kevin_domain::RoleOverrides::new(),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Test doubles used by the restart and chaos scenarios
+// ---------------------------------------------------------------------------
+
+/// Holds the first attempt of every task (so the runtime can be killed under
+/// it) and delegates every later attempt.
+pub struct HoldOnce {
+    inner: Arc<dyn Worker>,
+    seen: std::sync::Mutex<std::collections::HashMap<kevin_domain::TaskId, usize>>,
+    started: std::sync::atomic::AtomicUsize,
+}
+
+impl std::fmt::Debug for HoldOnce {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HoldOnce").finish_non_exhaustive()
+    }
+}
+
+impl HoldOnce {
+    #[must_use]
+    pub fn new(inner: Arc<dyn Worker>) -> Self {
+        Self {
+            inner,
+            seen: std::sync::Mutex::new(std::collections::HashMap::new()),
+            started: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    /// How many attempts actually reached the worker.
+    #[must_use]
+    pub fn started(&self) -> usize {
+        self.started.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+#[async_trait::async_trait]
+impl Worker for HoldOnce {
+    fn kind(&self) -> WorkerKind {
+        self.inner.kind()
+    }
+
+    async fn doctor(&self) -> kevin_worker::Doctor {
+        self.inner.doctor().await
+    }
+
+    fn validate_alias(
+        &self,
+        alias: &ModelAlias,
+        entry: &ModelEntry,
+    ) -> Result<(), kevin_config::ConfigError> {
+        self.inner.validate_alias(alias, entry)
+    }
+
+    async fn start(
+        &self,
+        req: kevin_worker::TaskAttemptRequest,
+    ) -> Result<kevin_worker::WorkerHandle, kevin_worker::WorkerError> {
+        let attempt = {
+            let mut seen = self
+                .seen
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let count = seen.entry(req.task_id).or_insert(0);
+            *count += 1;
+            *count
+        };
+        self.started
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if attempt > 1 {
+            let kind = self.inner.kind();
+            let cancel = req.cancel.clone();
+            return Ok(kevin_worker::WorkerHandle::spawn(
+                kind,
+                cancel,
+                move |mut sink| async move {
+                    sink.emit(kevin_worker::WorkerEvent::Started {
+                        session_id: None,
+                        pid: None,
+                    })
+                    .await;
+                    sink.emit(kevin_worker::WorkerEvent::Final {
+                        text: "done".to_owned(),
+                        structured: None,
+                        usage: kevin_worker::Usage::default(),
+                    })
+                    .await;
+                    kevin_worker::WorkerOutcome::Succeeded {
+                        text: "done".to_owned(),
+                        structured: None,
+                        usage: kevin_worker::Usage::default(),
+                        session_id: None,
+                        transcript: kevin_worker::ArtifactRef {
+                            id: uuid::Uuid::now_v7(),
+                            kind: kevin_worker::ArtifactKind::Transcript,
+                            uri: "file:///dev/null".to_owned(),
+                            sha256: String::new(),
+                            bytes: 0,
+                        },
+                    }
+                },
+            ));
+        }
+        self.inner.start(req).await
     }
 }

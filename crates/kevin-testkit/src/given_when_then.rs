@@ -407,6 +407,7 @@ pub mod run {
             budget: values::budget(),
             requested_by: "valentin".to_owned(),
             auto_approve_plans: false,
+            role_overrides: kevin_domain::RoleOverrides::new(),
         }
     }
 
@@ -617,6 +618,7 @@ pub mod run {
             budget: cmd.budget.clone(),
             requested_by: cmd.requested_by.clone(),
             auto_approve_plans: cmd.auto_approve_plans,
+            role_overrides: cmd.role_overrides.clone(),
         }
     }
 
@@ -1339,6 +1341,7 @@ pub mod evaluation {
         AcceptProposal {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("routing looks right".to_owned()),
         }
     }
 
@@ -1348,6 +1351,7 @@ pub mod evaluation {
         RejectProposal {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("we already tried this alias".to_owned()),
         }
     }
 
@@ -1375,6 +1379,7 @@ pub mod evaluation {
         EvaluationEvent::ProposalAccepted {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("routing looks right".to_owned()),
         }
     }
 
@@ -1384,6 +1389,7 @@ pub mod evaluation {
         EvaluationEvent::ProposalRejected {
             proposal_id: ids::proposal_id(1),
             by: "valentin".to_owned(),
+            note: Some("we already tried this alias".to_owned()),
         }
     }
 }

@@ -102,24 +102,43 @@ impl SandboxPolicy {
     }
 
     /// Rejects any forbidden flag in `argv` unless the tier allows them.
+    ///
+    /// Every token is normalised before it is compared: shell-style quotes are
+    /// dropped and `key=value` pairs are split, so
+    /// `-c sandbox_mode="danger-full-access"` — which `codex` accepts as a TOML
+    /// value and which is functionally identical to the bare form — is caught
+    /// like the bare form (`ac_ws25_5_2_*`). Matching the raw token only would
+    /// leave a one-quote bypass of the whole sandbox tier.
     pub fn check_argv<S: AsRef<str>>(&self, argv: &[S]) -> Result<(), WorkerError> {
         if self.allows_dangerous_flags() {
             return Ok(());
         }
         for arg in argv {
-            let arg = arg.as_ref();
-            if let Some(flag) = FORBIDDEN_FLAGS
-                .iter()
-                .find(|f| arg == **f || arg.split('=').any(|part| part == **f))
-            {
+            if let Some(flag) = forbidden_in(arg.as_ref()) {
                 return Err(WorkerError::PolicyViolation {
-                    flag: (*flag).to_owned(),
+                    flag: flag.to_owned(),
                     tier: self.tier.to_string(),
                 });
             }
         }
         Ok(())
     }
+}
+
+/// Drops shell-style quotes so `sandbox_mode="danger-full-access"` compares
+/// equal to the table value (same normalisation as
+/// `kevin_workspace::sandbox`, which is the authoritative table).
+fn unquote(value: &str) -> String {
+    value.replace(['"', '\''], "")
+}
+
+/// The forbidden flag `arg` carries, if any.
+fn forbidden_in(arg: &str) -> Option<&'static str> {
+    let arg = unquote(arg);
+    FORBIDDEN_FLAGS
+        .iter()
+        .find(|f| arg == **f || arg.split('=').any(|part| part == **f))
+        .copied()
 }
 
 impl From<&kevin_config::Sandbox> for SandboxPolicy {
@@ -129,11 +148,10 @@ impl From<&kevin_config::Sandbox> for SandboxPolicy {
             kevin_config::SandboxTier::Container => SandboxTier::Container,
             kevin_config::SandboxTier::None => SandboxTier::None,
         };
-        Self {
-            tier,
-            allow_dangerous_flags: sandbox.allow_dangerous_flags
-                || matches!(tier, SandboxTier::Container | SandboxTier::None),
-        }
+        // `sandbox.allow_dangerous_flags` is *not* trusted: the tier is the
+        // single validated switch (`plan/09-security.md` §Sandbox tiers), so a
+        // configuration that sets the flag can never relax `cli-native`.
+        Self::for_tier(tier)
     }
 }
 

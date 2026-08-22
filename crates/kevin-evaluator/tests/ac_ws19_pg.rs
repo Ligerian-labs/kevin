@@ -141,7 +141,10 @@ async fn ac_ws19_5_pg_accepting_a_proposal_emits_the_event_and_applies() {
         .find(|p| p.kind == ProposalKind::Routing)
         .expect("routing proposal");
 
-    let accepted = inbox.accept(routing.id, "vale").await.expect("accepted");
+    let accepted = inbox
+        .accept(routing.id, "vale", None)
+        .await
+        .expect("accepted");
     assert!(accepted.applied);
     assert_eq!(router.len(), 1);
     assert_eq!(router.outcomes()[0].task_kind, TaskKind::Implement);

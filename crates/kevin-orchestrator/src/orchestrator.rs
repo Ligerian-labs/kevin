@@ -320,6 +320,14 @@ impl Handle {
         self.subscriber.abort();
     }
 
+    /// [`Handle::abort`], but returns only once the actor tasks have really
+    /// stopped — so a test that reboots afterwards cannot race the engine it
+    /// just killed. See [`RunSupervisor::abort_and_join`].
+    pub async fn abort_and_join(&self) {
+        self.subscriber.abort();
+        self.supervisor.abort_and_join().await;
+    }
+
     /// Drains, waits `kevin.shutdown_grace_period` for running attempts, then
     /// cancels the token tree and stops every actor.
     pub async fn shutdown(&self) {

@@ -221,7 +221,7 @@ kevin [--config <file>] [--set <k=v>]... [--server <url>] [--token-file <path>] 
   lessons [--limit N] [--repo]
   memory search <query> [--kinds a,b] [--top-k N] | add --kind fact|preference <text> [--tag t] [--global] | forget <item-id>|--run <run>|--repo <scope>|--all-before <date> | reindex [--model m] | doctor | export --json | import <file>
   eval   rerun <run-id>
-  proposals ls | accept <id> | reject <id> [--note]
+  proposals ls | show <id> | accept <id> [--note] | reject <id> [--note]
   cost [--since <dur>] [--group-by run|model|kind] [--run <run-id>]
   kohral conformance [--base-url <url>] [--token <t>] [--phase basic|accept-crash|verify-crash]
   completions <shell>

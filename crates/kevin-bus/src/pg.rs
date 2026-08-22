@@ -104,6 +104,31 @@ impl PgNotifyBus {
         Self::with_config(pool, source, PgNotifyBusConfig::default()).await
     }
 
+    /// Stops the listener and the pump, releasing the pool connection the
+    /// `LISTEN` holds.
+    ///
+    /// A `PgListener` blocks on its connection for as long as it lives, so a
+    /// `PgPool::close()` that runs while the pump is alive waits forever. A
+    /// process shutting down must therefore stop the bus *before* it closes
+    /// the pool; `Drop` does the same thing, but only once the last clone is
+    /// gone, which is too late when the pool is closed from a still-shared
+    /// handle.
+    ///
+    /// Idempotent: calling it twice, or after the last clone was dropped, is a
+    /// no-op. Subscriptions created afterwards end immediately.
+    pub fn shutdown(&self) {
+        self.inner.cancel.cancel();
+        for task in self
+            .inner
+            .tasks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain(..)
+        {
+            task.abort();
+        }
+    }
+
     /// [`Self::new`] with explicit tuning.
     pub async fn with_config(
         pool: PgPool,

@@ -139,9 +139,15 @@ impl Proposals {
     }
 
     /// Accepts a proposal: emits `evaluation.proposal_accepted` and applies it
-    /// when it is a routing directive the router can take.
-    pub async fn accept(&self, id: ProposalId, by: &str) -> Result<AcceptOutcome> {
-        let row = self.repo.decide(id, Decision::Accept, by).await?;
+    /// when it is a routing directive the router can take. `note` is the
+    /// operator's reason, recorded on the event.
+    pub async fn accept(
+        &self,
+        id: ProposalId,
+        by: &str,
+        note: Option<String>,
+    ) -> Result<AcceptOutcome> {
+        let row = self.repo.decide(id, Decision::Accept, by, note).await?;
         let (applied, manual) = self.apply(&row).await?;
         metrics::counter!(
             crate::evaluator::EVAL_PROPOSALS,
@@ -163,9 +169,16 @@ impl Proposals {
         })
     }
 
-    /// Rejects a proposal (`evaluation.proposal_rejected`).
-    pub async fn reject(&self, id: ProposalId, by: &str) -> Result<ProposalRow> {
-        let row = self.repo.decide(id, Decision::Reject, by).await?;
+    /// Rejects a proposal (`evaluation.proposal_rejected`). `note` is the
+    /// operator's reason, recorded on the event so `kevin eval` and the audit
+    /// trail can say *why* a proposal was turned down.
+    pub async fn reject(
+        &self,
+        id: ProposalId,
+        by: &str,
+        note: Option<String>,
+    ) -> Result<ProposalRow> {
+        let row = self.repo.decide(id, Decision::Reject, by, note).await?;
         metrics::counter!(
             crate::evaluator::EVAL_PROPOSALS,
             "kind" => crate::repo::kind_str(row.kind),

@@ -67,11 +67,13 @@ mod tests {
         let event = EvaluationEvent::ProposalRejected {
             proposal_id: kevin_domain::ProposalId::new(),
             by: "vale".to_owned(),
+            note: Some("not this time".to_owned()),
         };
         let wrapped = new_event(run_id, &event, actor()).unwrap();
         assert_eq!(wrapped.event_type, PROPOSAL_REJECTED);
-        assert_eq!(wrapped.schema_version, 1);
+        assert_eq!(wrapped.schema_version, 2, "v2 added `note`");
         assert_eq!(wrapped.correlation_id, run_id.as_uuid());
         assert_eq!(wrapped.payload["type"], PROPOSAL_REJECTED);
+        assert_eq!(wrapped.payload["note"], "not this time");
     }
 }

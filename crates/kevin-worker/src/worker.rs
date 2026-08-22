@@ -345,6 +345,25 @@ impl WorkerError {
             source,
         }
     }
+
+    /// How the orchestrator should classify an attempt that failed to start.
+    ///
+    /// A missing binary, an invalid alias or a policy violation will be exactly
+    /// as broken on the next attempt: retrying burns the task's attempt budget
+    /// and hides the real cause behind "max attempts exhausted". Only genuine
+    /// IO — a full disk, an unwritable transcript directory, a workspace that
+    /// has not appeared yet — is worth retrying.
+    #[must_use]
+    pub const fn failure_class(&self) -> FailureClass {
+        match self {
+            WorkerError::BinaryMissing { .. }
+            | WorkerError::InvalidAlias { .. }
+            | WorkerError::PolicyViolation { .. } => FailureClass::Permanent,
+            WorkerError::WorkspaceUnavailable { .. } | WorkerError::Io { .. } => {
+                FailureClass::Transient
+            }
+        }
+    }
 }
 
 /// A worker adapter: drives one CLI (or the in-process fake).

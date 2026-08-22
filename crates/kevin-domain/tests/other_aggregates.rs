@@ -256,6 +256,7 @@ fn proposals_are_decided_once() {
         .when(AcceptProposal {
             proposal_id: ids::proposal_id(9),
             by: "v".into(),
+            note: None,
         })
         .then_err(DomainError::UnknownProposal {
             proposal_id: ids::proposal_id(9),

@@ -83,7 +83,13 @@ fn ac_ws01_3_every_event_round_trips_with_schema_version_and_has_a_snapshot() {
 
     for event in &instances {
         let event_type = event.event_type();
-        assert_eq!(event.schema_version(), 1);
+        // Most events are still v1; the two proposal-decision events are v2
+        // (`note` was added). The snapshot name below carries the version, so
+        // a bump is visible as a new file rather than an edited one.
+        assert!(
+            event.schema_version() >= 1,
+            "{event_type} has schema_version 0"
+        );
         let value = serde_json::to_value(event).unwrap();
         // Payload is self-describing: the `type` key equals the catalog name.
         assert_eq!(

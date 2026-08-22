@@ -205,6 +205,10 @@ impl RuntimePort for OrchestratorRuntime {
             budget: budget_from(request.budget.as_ref(), &config.budget),
             requested_by: Self::actor_name(&ctx),
             auto_approve_plans: config.kevin.auto_approve_plans,
+            // The HTTP surface has no per-run model picker (`plan/07` §DTOs);
+            // the configured `[roles]` apply. Kohral is the caller that sets
+            // these (`plan/08` §1.2).
+            role_overrides: kevin_domain::RoleOverrides::new(),
         };
 
         let started = self.handle.start_run(cmd, &Self::ctx(&ctx, run_id)).await?;

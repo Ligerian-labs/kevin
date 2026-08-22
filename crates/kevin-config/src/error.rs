@@ -57,15 +57,17 @@ pub enum ConfigError {
         /// The project file.
         layer: Source,
     },
-    /// `server.bind` is not loopback and no auth token file is configured.
+    /// `server.bind` is not loopback and no usable auth token file protects it.
     #[error(
-        "server.bind ({layer}): binding {bind} (non-loopback) requires a non-empty server.auth_token_file (or kohral.token_file with the kohral profile)"
+        "server.bind ({layer}): binding {bind} (non-loopback) requires a server.auth_token_file that exists with mode 0600 (or kohral.token_file with the kohral profile): {reason}"
     )]
     InsecureBind {
         /// The offending bind address.
         bind: String,
         /// Layer that set the bind.
         layer: Source,
+        /// Why the configured token file cannot protect the bind.
+        reason: String,
     },
     /// `database.url` is not a `postgres://` URL.
     #[error("database.url ({layer}): {message}")]

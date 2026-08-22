@@ -34,6 +34,11 @@ test *ARGS:
 # Full gate: fmt --check, clippy -D warnings, cargo-deny, nextest.
 ci: fmt-check clippy deny test
 
+# The WS-25 load scenario (50 fake tasks in one run). Kept out of `ci`: it takes
+# ~15 s of wall clock on its own and asserts timing-shaped properties.
+load-test:
+    KEVIN_LOAD_TESTS=1 cargo nextest run -p kevin-orchestrator --test ac_ws25_load --no-capture
+
 # Start the pgvector Postgres from deploy/compose/postgres.yml (podman compose, else docker compose).
 db-up: (_compose "up" "-d" "--wait")
 

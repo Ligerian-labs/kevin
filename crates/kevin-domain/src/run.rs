@@ -29,6 +29,7 @@ use crate::aggregate::{Aggregate, EventMeta};
 use crate::error::DomainError;
 use crate::ids::{EvaluationId, QuestionId, RunId, TaskId};
 use crate::kinds::FailureClass;
+use crate::kinds::ModelAlias;
 use crate::plan::{Plan, PlanValidator};
 use crate::understanding::Understanding;
 use crate::values::{
@@ -38,6 +39,15 @@ use crate::values::{
 
 /// Aggregate type name (`EventEnvelope::aggregate_type`).
 pub const RUN_AGGREGATE_TYPE: &str = "run";
+
+/// Per-run override of the `[roles]` table, keyed by role name
+/// (`planner`, `clarifier`, `judge`, `integrator`, `default`).
+///
+/// A `String` key rather than an enum: the role enum belongs to
+/// `kevin-config`, and `kevin-domain` depends on nothing internal
+/// (`plan/01-architecture.md` §Dependency direction). An unknown key is
+/// simply never looked up.
+pub type RoleOverrides = BTreeMap<String, ModelAlias>;
 
 /// Value of `by` in `run.plan_approved` for automatic approvals.
 pub const AUTO_APPROVED_BY: &str = "auto";
@@ -178,6 +188,15 @@ pub struct StartRun {
     /// `kevin.auto_approve_plans`; headless/Kohral modes auto-approve regardless.
     #[serde(default)]
     pub auto_approve_plans: bool,
+    /// Per-run override of the `[roles]` table (`plan/02` §Run).
+    ///
+    /// Keyed by role name — `planner`, `clarifier`, `judge`, `integrator`,
+    /// `default` — because the role enum lives in `kevin-config`, which this
+    /// crate must not depend on. Empty for a CLI or API run; Kohral fills it
+    /// from the turn's `model` field, the only way a caller picks the model for
+    /// one run without editing configuration.
+    #[serde(default)]
+    pub role_overrides: RoleOverrides,
 }
 
 /// The planner call started (`run.understanding_started`).
@@ -445,6 +464,10 @@ pub enum RunEvent {
         requested_by: String,
         /// Plans auto-approve (config or mode).
         auto_approve_plans: bool,
+        /// Per-run `[roles]` override, recorded so a restarted runtime resumes
+        /// the run on the model the caller asked for.
+        #[serde(default)]
+        role_overrides: RoleOverrides,
     },
     /// `run.understanding_started`
     #[serde(rename = "run.understanding_started")]
@@ -660,6 +683,7 @@ pub struct Run {
     mode: Option<RunMode>,
     budget: Budget,
     auto_approve_plans: bool,
+    role_overrides: RoleOverrides,
     status: RunStatus,
     understanding: Option<Understanding>,
     plan: Option<Plan>,
@@ -687,6 +711,7 @@ impl Default for Run {
             mode: None,
             budget: Budget::unlimited(),
             auto_approve_plans: false,
+            role_overrides: RoleOverrides::new(),
             status: RunStatus::Received,
             understanding: None,
             plan: None,
@@ -741,6 +766,12 @@ impl Run {
     #[must_use]
     pub const fn budget(&self) -> &Budget {
         &self.budget
+    }
+
+    /// Per-run `[roles]` overrides given at [`StartRun`] (empty by default).
+    #[must_use]
+    pub const fn role_overrides(&self) -> &RoleOverrides {
+        &self.role_overrides
     }
 
     /// Rolled-up usage (planner calls + every task's cumulative usage).
@@ -925,6 +956,7 @@ impl Run {
             budget: cmd.budget.clone(),
             requested_by: cmd.requested_by.clone(),
             auto_approve_plans: cmd.auto_approve_plans,
+            role_overrides: cmd.role_overrides.clone(),
         }])
     }
 
@@ -1259,6 +1291,7 @@ impl Aggregate for Run {
                 budget,
                 requested_by,
                 auto_approve_plans,
+                role_overrides,
             } => {
                 self.id = *run_id;
                 self.goal = Some(goal.clone());
@@ -1266,6 +1299,7 @@ impl Aggregate for Run {
                 self.budget = budget.clone();
                 self.requested_by.clone_from(requested_by);
                 self.auto_approve_plans = *auto_approve_plans;
+                self.role_overrides.clone_from(role_overrides);
                 self.status = RunStatus::Received;
             }
             RunEvent::UnderstandingStarted { .. } => {
