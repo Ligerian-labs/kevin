@@ -2271,10 +2271,35 @@ dependencies = [
 name = "kevin-kohral"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "chrono",
  "kevin-api",
+ "kevin-bus",
  "kevin-config",
  "kevin-domain",
  "kevin-orchestrator",
+ "kevin-router",
+ "kevin-store",
+ "kevin-telemetry",
+ "kevin-testkit",
+ "kevin-worker",
+ "metrics",
+ "regex",
+ "reqwest 0.13.1",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

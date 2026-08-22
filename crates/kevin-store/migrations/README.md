@@ -39,3 +39,4 @@ Current allocation:
 | 0003 | `0003_routing.sql` | `routing` | WS-09 |
 | 0004 | `0004_memory.sql` | `memory` | WS-18 |
 | 0005 | `0005_eval.sql` | `eval` (evaluations, proposals inbox) | WS-19 |
+| 0006 | `0006_kohral.sql` | `kohral` (runs ledger, session messages) | WS-22 |

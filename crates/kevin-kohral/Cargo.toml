@@ -14,6 +14,34 @@ workspace = true
 [dependencies]
 kevin-domain.workspace = true
 kevin-config.workspace = true
-kevin-api.workspace = true
+kevin-api = { workspace = true, features = ["server"] }
 kevin-orchestrator.workspace = true
+kevin-bus.workspace = true
+kevin-router.workspace = true
+kevin-store.workspace = true
+kevin-telemetry.workspace = true
+kevin-worker.workspace = true
 
+anyhow.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+chrono.workspace = true
+metrics.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net"] }
+tokio-util.workspace = true
+toml.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+kevin-testkit = { workspace = true, features = ["pg"] }
+regex.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

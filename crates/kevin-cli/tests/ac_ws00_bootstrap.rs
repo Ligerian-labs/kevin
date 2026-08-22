@@ -115,11 +115,10 @@ fn ac_ws00_2_stubs_exit_2_not_implemented() {
             "no",
         ],
         // `db` (WS-03), `config show` (WS-02), `workers doctor` (WS-05),
-        // `routes` (WS-09), `lessons`/`memory` (WS-18), `proposals` (WS-19) and
-        // `tui` (WS-17) are implemented.
+        // `routes` (WS-09), `lessons`/`memory` (WS-18), `proposals` (WS-19),
+        // `tui` (WS-17) and `kohral conformance` (WS-22) are implemented.
         &["eval", "rerun", "01910000-0000-7000-8000-000000000001"],
         &["cost", "--group-by", "model"],
-        &["kohral", "conformance", "--phase", "basic"],
     ];
     for args in cases {
         kevin()
