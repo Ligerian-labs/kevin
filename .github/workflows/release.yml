@@ -1,0 +1,400 @@
+name: release
+
+# Cuts a Kevin release: prebuilt `kevin` binaries for the four supported
+# targets, a multi-arch container image, and a GitHub release that carries the
+# CHANGELOG section, generated notes and `SHA256SUMS`.
+# Runbook: docs/releasing.md. This workflow never runs on pull requests, so it
+# cannot weaken the `ci` gate.
+#
+# TOOLING CHOICE — taiki-e/upload-rust-binary-action, not cargo-dist.
+#   * cargo-dist owns the release pipeline: it *generates* `release.yml` from
+#     `[workspace.metadata.dist]` and expects to regenerate it (`dist init`),
+#     which does not survive hand-written jobs like the image/cosign job below,
+#     and it assumes crates.io-publishable packages — every Kevin crate is
+#     `publish = false` (see the `no-crates-io` job).
+#   * taiki-e/upload-rust-binary-action is one pinned step that builds, strips,
+#     packages `.tar.gz`, emits the per-archive checksum and uploads it, and
+#     leaves the rest of the workflow ours. The repo already uses
+#     taiki-e/install-action in `ci.yml`, so this is one supply-chain
+#     dependency, not two.
+# Every action that touches a published artefact — building, packaging,
+# pushing, signing, attesting — is pinned to an exact release tag rather than a
+# floating major, so a moved upstream tag cannot silently change what we ship.
+# The ubiquitous setup actions (checkout, rust-toolchain, rust-cache) follow
+# `ci.yml` and stay on their major tags.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build, e.g. v0.1.0. Leave empty for a dry run that builds everything and publishes nothing."
+        required: false
+        type: string
+
+# Least privilege by default; jobs opt into what they need.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+  IMAGE: ghcr.io/ligerian-labs/kevin
+
+jobs:
+  # ---------------------------------------------------------------- plan
+  # Resolves what we are releasing and whether we are allowed to publish.
+  prepare:
+    name: prepare
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      publish: ${{ steps.resolve.outputs.publish }}
+      can-push-image: ${{ steps.registry.outputs.can-push }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag and version
+        id: resolve
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${INPUT_TAG}"
+          fi
+          if [ -z "${tag}" ]; then
+            echo "no tag: dry run (build everything, publish nothing)"
+            {
+              echo "tag="
+              echo "version="
+              echo "publish=false"
+            } >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "${tag}" in
+            v[0-9]*.[0-9]*.[0-9]*) : ;;
+            *) echo "::error::tag '${tag}' is not vX.Y.Z" >&2; exit 1 ;;
+          esac
+          version="${tag#v}"
+          # The workspace is versioned as a whole (workspace.package.version);
+          # a tag that disagrees with it would ship a binary whose --version
+          # lies. Fail early, before anything is published.
+          manifest="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)"
+          if [ "${manifest}" != "${version}" ]; then
+            echo "::error::tag ${tag} does not match workspace.package.version ${manifest}" >&2
+            exit 1
+          fi
+          if ! grep -qF "## [${version}]" CHANGELOG.md; then
+            echo "::warning::CHANGELOG.md has no '## [${version}]' section; release notes will only contain generated notes"
+          fi
+          {
+            echo "tag=${tag}"
+            echo "version=${version}"
+            echo "publish=true"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Can we push to the registry?
+        id: registry
+        run: |
+          set -euo pipefail
+          # GHCR pushes need `packages: write`, which a fork's GITHUB_TOKEN
+          # never gets, and the image namespace belongs to this repository.
+          # Everything still gets *built* below; only the push/sign/attest
+          # steps are skipped, and the job reports success.
+          if [ "${GITHUB_REPOSITORY}" = "Ligerian-labs/kevin" ] && [ "${{ github.event.repository.fork }}" != "true" ]; then
+            echo "can-push=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "::notice::running outside Ligerian-labs/kevin — the image will be built but not pushed, signed or attested"
+            echo "can-push=false" >>"$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------- crates.io
+  # Kevin is not on crates.io: every crate sets `publish = false` in
+  # `workspace.package`, because `kevin-cli` is only useful together with the
+  # whole workspace and the crate names are not reserved. The documented
+  # source install is `cargo install --path crates/kevin-cli` (README.md).
+  # This job keeps that decision honest: if someone flips `publish`, it turns
+  # into a real packaging dry run instead of silently doing nothing.
+  no-crates-io:
+    name: crates.io policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Assert the publish policy, or dry-run the packaging
+        run: |
+          set -euo pipefail
+          if grep -q '^publish = false$' Cargo.toml; then
+            echo "workspace.package.publish = false — crates are not published to crates.io."
+            echo "Verifying the documented install path instead: cargo install --path crates/kevin-cli"
+            cargo install --path crates/kevin-cli --locked --root "${RUNNER_TEMP}/install" --force
+            "${RUNNER_TEMP}/install/bin/kevin" --version
+          else
+            echo "publish is enabled — validating the crates.io payload."
+            cargo publish --dry-run --locked -p kevin-cli
+          fi
+
+  # ---------------------------------------------------------------- release
+  create-release:
+    name: create release
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract the CHANGELOG section
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Everything between `## [VERSION]` and the next `## [` heading.
+          awk -v version="## [${VERSION}]" '
+            index($0, version) == 1 { capture = 1; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md >notes.md
+          if [ ! -s notes.md ]; then
+            printf 'See the commit list below.\n' >notes.md
+          fi
+          cat notes.md
+
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Draft first: assets are attached by the jobs below and the release
+          # is published only once every one of them succeeded.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --draft --title "${TAG}" --notes-file notes.md
+          else
+            gh release create "${TAG}" --draft --title "${TAG}" --notes-file notes.md --generate-notes
+          fi
+
+  # ---------------------------------------------------------------- binaries
+  binaries:
+    name: kevin (${{ matrix.target }})
+    needs: [prepare, create-release]
+    # `always()` so a dry run (no create-release job) still builds everything.
+    if: always() && needs.prepare.result == 'success' && needs.create-release.result != 'failure'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: write # upload-rust-binary-action attaches the archive
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # build.rs stamps the commit id into `kevin --version`
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # Cross-compile aarch64 Linux on the host toolchain rather than in a
+      # `cross` container, so build.rs still sees the git checkout and the
+      # environment (KEVIN_BUILD_* / SOURCE_DATE_EPOCH) reaches the compiler.
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1.42.0
+        with:
+          target: ${{ matrix.target }}
+          runner: none # cross-compile only, we never run the target binaries here
+        if: startsWith(matrix.os, 'ubuntu')
+
+      # Builds `--release`, strips, packages `kevin-<target>.tar.gz` with the
+      # binary + README + CHANGELOG under a leading directory, writes the
+      # `.sha256` sidecar and uploads both to the release for `tag`.
+      - uses: taiki-e/upload-rust-binary-action@v1.30.2
+        with:
+          bin: kevin
+          package: kevin-cli
+          target: ${{ matrix.target }}
+          archive: kevin-$target
+          tar: all
+          zip: none
+          checksum: sha256
+          include: README.md,CHANGELOG.md
+          leading-dir: true
+          locked: true
+          build-tool: cargo
+          ref: ${{ needs.prepare.outputs.publish == 'true' && format('refs/tags/{0}', needs.prepare.outputs.tag) || '' }}
+          dry-run: ${{ needs.prepare.outputs.publish != 'true' }}
+          dry-run-intended: ${{ needs.prepare.outputs.publish != 'true' }}
+          token: ${{ github.token }}
+
+  # ---------------------------------------------------------------- checksums
+  checksums:
+    name: SHA256SUMS
+    needs: [prepare, binaries]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Aggregate the per-archive checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist && cd dist
+          gh release download "${TAG}" --pattern '*.tar.gz' --dir .
+          # One file, `sha256sum -c SHA256SUMS` verifies the whole release.
+          sha256sum -- *.tar.gz | sort -k2 >SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "${TAG}" SHA256SUMS --clobber
+
+  # ---------------------------------------------------------------- image
+  image:
+    name: container image
+    needs: prepare
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+      id-token: write # cosign keyless (OIDC) + provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # linux/arm64: only the small runtime stage runs emulated — the builder
+      # stage is pinned to $BUILDPLATFORM and cross-compiles (deploy/Dockerfile).
+      - uses: docker/setup-qemu-action@v4.2.0
+      - uses: docker/setup-buildx-action@v4.3.0
+
+      - name: Log in to ghcr.io
+        id: login
+        if: needs.prepare.outputs.can-push-image == 'true'
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Decide whether this run publishes the image
+        id: mode
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.prepare.outputs.can-push-image }}" = "true" ] \
+             && [ "${{ steps.login.outcome }}" = "success" ] \
+             && [ "${{ needs.prepare.outputs.publish }}" = "true" ]; then
+            echo "push=true" >>"$GITHUB_OUTPUT"
+          else
+            # Not a failure: forks and dry runs still prove the image builds.
+            echo "::notice::building the image without publishing (no registry credentials, or no tag)"
+            echo "push=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/metadata-action@v6.2.0
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.prepare.outputs.tag }},enable=${{ needs.prepare.outputs.publish == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare.outputs.tag }},enable=${{ needs.prepare.outputs.publish == 'true' }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.publish == 'true' }}
+            type=raw,value=dry-run,enable=${{ needs.prepare.outputs.publish != 'true' }}
+          labels: |
+            org.opencontainers.image.title=kevin
+            org.opencontainers.image.description=Kevin daemon (kevin serve). Does not bundle the coding-agent CLIs.
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build (and publish) the multi-arch image
+        id: build
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ steps.mode.outputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            KEVIN_BUILD_GIT_SHA=${{ github.sha }}
+          # SBOM + SLSA provenance travel with the image in the registry; both
+          # need a push, so they are off for dry/fork runs.
+          sbom: ${{ steps.mode.outputs.push == 'true' }}
+          provenance: ${{ steps.mode.outputs.push == 'true' && 'mode=max' || 'false' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        if: steps.mode.outputs.push == 'true'
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign the image (keyless)
+        if: steps.mode.outputs.push == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # Keyless: the signature is bound to this workflow's OIDC identity and
+          # recorded in the Rekor transparency log. Verification recipe is in
+          # docs/releasing.md.
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Attest build provenance
+        if: steps.mode.outputs.push == 'true'
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # ---------------------------------------------------------------- publish
+  publish-release:
+    name: publish release
+    needs: [prepare, create-release, binaries, checksums, image, no-crates-io]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Undraft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release edit "${TAG}" --draft=false --latest
+          gh release view "${TAG}" --json assets --jq '.assets[].name'

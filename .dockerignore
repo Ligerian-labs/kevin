@@ -1,0 +1,19 @@
+# Build context for deploy/Dockerfile (context = the repository root).
+# Keep the context small — but only exclude things the builder provably does
+# not need: several crates `include_str!` files from their own directories
+# (`crates/kevin-orchestrator/prompts/*.md`, `crates/kevin-config/assets/`),
+# so nothing under `crates/` is filtered here.
+.git
+.jj
+target/
+**/target/
+workspace/
+thoughts/
+.kevin/
+.github/
+plan/
+docs/
+testing/
+.env
+.env.*
+.DS_Store
