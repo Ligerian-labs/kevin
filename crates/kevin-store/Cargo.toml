@@ -15,6 +15,7 @@ workspace = true
 kevin-domain.workspace = true
 kevin-config.workspace = true
 kevin-telemetry.workspace = true
+kevin-bus.workspace = true
 
 async-trait.workspace = true
 chrono.workspace = true

@@ -54,7 +54,7 @@ use kevin_store::{Db, PgPool};
 use kevin_telemetry::{TelemetryConfig, events, fields};
 use tokio_util::sync::CancellationToken;
 
-use crate::embedded::{Backend, EmbeddedRuntime};
+use crate::embedded::{Backend, BusMode, EmbeddedRuntime};
 use crate::{Ctx, ExitError, exit};
 
 /// Subcommand name.
@@ -132,6 +132,12 @@ pub async fn run(args: Args, ctx: &Ctx) -> anyhow::Result<ExitCode> {
     );
 
     // ---- 9. bind the API and flip ready ------------------------------------
+    // A non-loopback bind is only allowed once the token file it relies on
+    // really exists with mode 0600 (`plan/09-security.md` §API authentication).
+    // Checked here rather than at load time: the file may be created between
+    // `kevin config show` and `kevin serve`, but never after the port is open.
+    kevin_config::token::check_bind_security(&config)
+        .map_err(|e| ExitError::new(exit::INVALID_ARGS, e.to_string()))?;
     let state = app_state(&runtime, &resolved)?;
     let auth = Arc::clone(state.auth());
     let listener = tokio::net::TcpListener::bind(config.server.bind)
@@ -257,12 +263,16 @@ async fn shutdown(
 /// mid-turn, or the saga resumes work Kohral was promised would never be
 /// replayed (`plan/08-kohral-runtime.md` §1.9, `run_automatic_replay: false`).
 async fn boot(config: &Arc<KevinConfig>, kohral: bool) -> anyhow::Result<EmbeddedRuntime> {
-    if !kohral {
-        return EmbeddedRuntime::start(Arc::clone(config)).await;
-    }
     let cwd = std::env::current_dir()
         .map_err(|e| ExitError::new(exit::INVALID_ARGS, format!("current directory: {e}")))?;
-    let backend = Backend::open(Arc::clone(config)).await?;
+    // The daemon owns the runtime for *other* processes too, so it fans events
+    // out over Postgres `LISTEN/NOTIFY` rather than a process-local broadcast:
+    // a `kevin runs follow`, a TUI or a second replica attaches to this
+    // instance instead of seeing nothing (`plan/01` §Event-driven core).
+    let backend = Backend::open_with(Arc::clone(config), BusMode::CrossProcess).await?;
+    if !kohral {
+        return EmbeddedRuntime::boot_on(backend, &cwd, Vec::new()).await;
+    }
 
     let restarted = kevin_kohral::sweep_runtime_restarted(
         backend.pool(),

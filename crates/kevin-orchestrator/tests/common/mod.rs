@@ -762,3 +762,109 @@ impl Services {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Test doubles used by the restart and chaos scenarios
+// ---------------------------------------------------------------------------
+
+/// Holds the first attempt of every task (so the runtime can be killed under
+/// it) and delegates every later attempt.
+pub struct HoldOnce {
+    inner: Arc<dyn Worker>,
+    seen: std::sync::Mutex<std::collections::HashMap<kevin_domain::TaskId, usize>>,
+    started: std::sync::atomic::AtomicUsize,
+}
+
+impl std::fmt::Debug for HoldOnce {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HoldOnce").finish_non_exhaustive()
+    }
+}
+
+impl HoldOnce {
+    #[must_use]
+    pub fn new(inner: Arc<dyn Worker>) -> Self {
+        Self {
+            inner,
+            seen: std::sync::Mutex::new(std::collections::HashMap::new()),
+            started: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    /// How many attempts actually reached the worker.
+    #[must_use]
+    pub fn started(&self) -> usize {
+        self.started.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+#[async_trait::async_trait]
+impl Worker for HoldOnce {
+    fn kind(&self) -> WorkerKind {
+        self.inner.kind()
+    }
+
+    async fn doctor(&self) -> kevin_worker::Doctor {
+        self.inner.doctor().await
+    }
+
+    fn validate_alias(
+        &self,
+        alias: &ModelAlias,
+        entry: &ModelEntry,
+    ) -> Result<(), kevin_config::ConfigError> {
+        self.inner.validate_alias(alias, entry)
+    }
+
+    async fn start(
+        &self,
+        req: kevin_worker::TaskAttemptRequest,
+    ) -> Result<kevin_worker::WorkerHandle, kevin_worker::WorkerError> {
+        let attempt = {
+            let mut seen = self
+                .seen
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let count = seen.entry(req.task_id).or_insert(0);
+            *count += 1;
+            *count
+        };
+        self.started
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if attempt > 1 {
+            let kind = self.inner.kind();
+            let cancel = req.cancel.clone();
+            return Ok(kevin_worker::WorkerHandle::spawn(
+                kind,
+                cancel,
+                move |mut sink| async move {
+                    sink.emit(kevin_worker::WorkerEvent::Started {
+                        session_id: None,
+                        pid: None,
+                    })
+                    .await;
+                    sink.emit(kevin_worker::WorkerEvent::Final {
+                        text: "done".to_owned(),
+                        structured: None,
+                        usage: kevin_worker::Usage::default(),
+                    })
+                    .await;
+                    kevin_worker::WorkerOutcome::Succeeded {
+                        text: "done".to_owned(),
+                        structured: None,
+                        usage: kevin_worker::Usage::default(),
+                        session_id: None,
+                        transcript: kevin_worker::ArtifactRef {
+                            id: uuid::Uuid::now_v7(),
+                            kind: kevin_worker::ArtifactKind::Transcript,
+                            uri: "file:///dev/null".to_owned(),
+                            sha256: String::new(),
+                            bytes: 0,
+                        },
+                    }
+                },
+            ));
+        }
+        self.inner.start(req).await
+    }
+}

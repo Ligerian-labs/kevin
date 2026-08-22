@@ -176,7 +176,7 @@ async fn start_and_follow(
 
     // Subscribe *before* the command so no event of this run can be missed.
     let stream = backend
-        .bus()
+        .bus_erased()
         .subscribe(SubscriptionFilter::for_run(run_id.as_uuid()).named("kevin-run"));
 
     let by = actor();

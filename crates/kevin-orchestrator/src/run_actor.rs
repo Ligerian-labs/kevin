@@ -1297,6 +1297,15 @@ impl RunActor {
         ) {
             return;
         }
+        // Pre-flight budget gate (`plan/09-security.md` T7): admission stops as
+        // soon as the recorded usage has crossed a limit, so the overshoot is
+        // bounded by the attempts already in flight. Without it the run would
+        // keep dispatching until a worker reported the usage that finally
+        // triggers `run.budget_exhausted` — and a worker that never reports
+        // usage would never stop it. `ac_ws25_7_*` fuzzes the bound.
+        if self.budget_spent() {
+            return;
+        }
         let ready = scheduler::ready_tasks(&self.view.task_order, &self.view.tasks);
         metrics::gauge!(metric_names::SCHEDULER_READY_TASKS)
             .set(f64::from(u32::try_from(ready.len()).unwrap_or(u32::MAX)));
@@ -1310,6 +1319,11 @@ impl RunActor {
             }
             self.start_attempt(task_id).await;
         }
+    }
+
+    /// Whether the run has already spent its budget (see [`budget_spent`]).
+    fn budget_spent(&self) -> bool {
+        budget_spent(&self.view.run)
     }
 
     fn may_start(&self, task_id: TaskId) -> bool {
@@ -1793,6 +1807,18 @@ const fn outcome_label(outcome: TaskOutcome) -> &'static str {
         TaskOutcome::Cancelled => "cancelled",
         TaskOutcome::Skipped => "skipped",
     }
+}
+
+/// Whether `run` has already spent its budget: either `run.budget_exhausted`
+/// was recorded, or the usage it has *observed so far* already crosses a limit
+/// (the event follows on the next command).
+///
+/// This is the admission gate of `RunActor::schedule`, exposed so the cost-cap
+/// property test (`ac_ws25_7_*`) fuzzes the production predicate rather than a
+/// copy of it.
+#[must_use]
+pub fn budget_spent(run: &Run) -> bool {
+    run.budget_exhausted().is_some() || run.budget().exceeded_by(run.usage()).is_some()
 }
 
 fn briefing(spec: &TaskSpec) -> String {

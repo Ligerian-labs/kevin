@@ -24,7 +24,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use kevin_bus::{EventBus, InProcBus};
+use kevin_bus::{EventBus, InProcBus, PgNotifyBus};
 use kevin_config::KevinConfig;
 use kevin_domain::route_score::RecordRouteOutcome as DomainRouteOutcome;
 use kevin_domain::{Clock, Goal, IdGen, SystemClock, UuidV7IdGen};
@@ -57,6 +57,45 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{ExitError, exit};
 
+/// How a [`Backend`] fans committed events out.
+///
+/// One-shot commands and `kevin run` own their process, so a
+/// `tokio::sync::broadcast` bus is enough. `kevin serve` is a *daemon*: a
+/// `kevin runs follow`, a TUI or a second replica running against the same
+/// database must see its events, which needs the cross-process bus. Both read
+/// events back from the event store by global position ([`PgEventStore`]
+/// implements `kevin_bus::EventSource`), so `NOTIFY` is only a wake-up and no
+/// event can be missed if one is lost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BusMode {
+    /// `InProcBus`: broadcast fan-out inside this process only.
+    InProcess,
+    /// `PgNotifyBus`: Postgres `LISTEN/NOTIFY` wake-ups + catch-up from the store.
+    CrossProcess,
+}
+
+impl BusMode {
+    async fn build(
+        self,
+        pool: &PgPool,
+        store: &Arc<PgEventStore>,
+    ) -> anyhow::Result<(Arc<dyn EventBus>, Option<PgNotifyBus>)> {
+        match self {
+            BusMode::InProcess => Ok((
+                Arc::new(InProcBus::with_defaults()) as Arc<dyn EventBus>,
+                None,
+            )),
+            BusMode::CrossProcess => {
+                let source = Arc::clone(store) as Arc<dyn kevin_bus::EventSource>;
+                let bus = PgNotifyBus::new(pool.clone(), source)
+                    .await
+                    .map_err(|e| ExitError::new(exit::UNREACHABLE, format!("event bus: {e}")))?;
+                Ok((Arc::new(bus.clone()) as Arc<dyn EventBus>, Some(bus)))
+            }
+        }
+    }
+}
+
 /// Shared plumbing every embedded command needs: pool, store, bus, services
 /// and read models.
 pub struct Backend {
@@ -64,8 +103,11 @@ pub struct Backend {
     pool: PgPool,
     store: Arc<PgEventStore>,
     store_erased: Arc<dyn EventStore>,
-    bus: Arc<InProcBus>,
-    bus_erased: Arc<dyn EventBus>,
+    bus: Arc<dyn EventBus>,
+    bus_mode: BusMode,
+    /// The cross-process bus, kept concrete so [`Backend::close`] can stop its
+    /// listener before the pool is closed.
+    pg_bus: Option<PgNotifyBus>,
     commands: Arc<CommandLog>,
     ids: Arc<UuidV7IdGen>,
     clock: Arc<SystemClock>,
@@ -85,8 +127,20 @@ impl std::fmt::Debug for Backend {
 
 impl Backend {
     /// Connects to Postgres, applies the migration policy of
-    /// `database.auto_migrate` and builds the services and read models.
+    /// `database.auto_migrate` and builds the services and read models with an
+    /// in-process bus ([`BusMode::InProcess`]).
     pub async fn open(config: Arc<KevinConfig>) -> anyhow::Result<Self> {
+        Self::open_with(config, BusMode::InProcess).await
+    }
+
+    /// [`Backend::open`] with an explicit [`BusMode`]. `kevin serve` opens with
+    /// [`BusMode::CrossProcess`] so a second process (a `kevin runs follow`, a
+    /// TUI, another daemon replica) sees this instance's events.
+    pub async fn open_with(config: Arc<KevinConfig>, bus_mode: BusMode) -> anyhow::Result<Self> {
+        // Before anything can log, append an event or write a transcript, the
+        // secrets this configuration resolved to are handed to the redaction
+        // layer (`plan/09-security.md` §Redaction).
+        crate::secrets::register(&config);
         let pool = Db::connect(&config.database)
             .await
             .map_err(|e| ExitError::new(exit::UNREACHABLE, format!("database: {e}")))?;
@@ -100,13 +154,13 @@ impl Backend {
             .map_err(|e| ExitError::new(exit::UNREACHABLE, format!("migrations: {e}")))?;
 
         let store = Arc::new(PgEventStore::new(pool.clone()));
-        let bus = Arc::new(InProcBus::with_defaults());
+        let (bus, pg_bus) = bus_mode.build(&pool, &store).await?;
         let commands = Arc::new(CommandLog::new(pool.clone()));
         let ids = Arc::new(UuidV7IdGen);
         let clock = Arc::new(SystemClock);
         let core = ServiceCore::new(
             Arc::clone(&store) as Arc<dyn EventStore>,
-            Arc::clone(&bus) as Arc<dyn EventBus>,
+            Arc::clone(&bus),
             Arc::clone(&commands) as Arc<dyn kevin_orchestrator::ports::CommandIdempotency>,
             Arc::clone(&clock) as Arc<dyn Clock>,
             Arc::clone(&ids) as Arc<dyn IdGen>,
@@ -120,8 +174,9 @@ impl Backend {
             pool,
             store_erased: Arc::clone(&store) as Arc<dyn EventStore>,
             store,
-            bus_erased: Arc::clone(&bus) as Arc<dyn EventBus>,
             bus,
+            bus_mode,
+            pg_bus,
             commands,
             ids,
             clock,
@@ -153,14 +208,14 @@ impl Backend {
     pub fn publishing_store(&self) -> Arc<dyn EventStore> {
         Arc::new(PublishingStore {
             inner: Arc::clone(&self.store) as Arc<dyn EventStore>,
-            bus: Arc::clone(&self.bus) as Arc<dyn EventBus>,
+            bus: Arc::clone(&self.bus),
         })
     }
 
-    /// The in-process event bus.
+    /// How this backend fans events out.
     #[must_use]
-    pub fn bus(&self) -> &Arc<InProcBus> {
-        &self.bus
+    pub const fn bus_mode(&self) -> BusMode {
+        self.bus_mode
     }
 
     /// The event store behind its trait object (what `kevin-api` wants).
@@ -171,8 +226,8 @@ impl Backend {
 
     /// The event bus behind its trait object (what `kevin-api` wants).
     #[must_use]
-    pub fn bus_erased(&self) -> &Arc<dyn EventBus> {
-        &self.bus_erased
+    pub const fn bus_erased(&self) -> &Arc<dyn EventBus> {
+        &self.bus
     }
 
     /// Typed queries over the `orch.*` read models.
@@ -239,8 +294,15 @@ impl Backend {
         Ok(())
     }
 
-    /// Closes the pool.
+    /// Stops the bus and closes the pool.
+    ///
+    /// Order matters: a `PgNotifyBus` holds a `LISTEN` connection for as long
+    /// as its pump runs, and `PgPool::close()` waits for every connection to
+    /// come back — closing the pool first hangs the shutdown forever.
     pub async fn close(self) {
+        if let Some(bus) = &self.pg_bus {
+            bus.shutdown();
+        }
         self.pool.close().await;
     }
 }
@@ -327,7 +389,7 @@ impl EmbeddedRuntime {
         let task_log = Arc::new(TaskLog::new(backend.pool.clone()));
 
         let store: Arc<dyn EventStore> = Arc::clone(&backend.store) as Arc<dyn EventStore>;
-        let bus: Arc<dyn EventBus> = Arc::clone(&backend.bus) as Arc<dyn EventBus>;
+        let bus: Arc<dyn EventBus> = Arc::clone(&backend.bus);
         let projections = projections::spawn_all(&backend.pool, &store, &bus, &cancel);
 
         let handle = Orchestrator::boot(Deps {

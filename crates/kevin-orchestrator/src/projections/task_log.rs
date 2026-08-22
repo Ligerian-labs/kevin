@@ -158,6 +158,12 @@ pub(crate) async fn append_line(
         .bind(line.attempt)
         .execute(&mut *conn)
         .await?;
+    // `plan/09-security.md` §Redaction: `orch.task_log` holds raw worker
+    // output (`assistant`, `tool_call`, `tool_result` lines) and feeds the API
+    // and the SSE stream, so it is a redaction sink like the event store. A
+    // worker that runs `cat .env` must not leave the credential in the table.
+    let mut payload = line.payload.clone();
+    kevin_telemetry::redact::Redactor::global().redact_value(&mut payload);
     let seq: Option<i64> = sqlx::query_scalar(
         "INSERT INTO orch.task_log (
              task_id, attempt, seq, at, kind, payload, run_id, attempt_id, source_event_id)
@@ -170,7 +176,7 @@ pub(crate) async fn append_line(
     .bind(line.attempt)
     .bind(line.at)
     .bind(&line.kind)
-    .bind(&line.payload)
+    .bind(&payload)
     .bind(line.run_id.map(|r| r.as_uuid()))
     .bind(line.attempt_id.map(|a| a.as_uuid()))
     .bind(line.source_event_id.map(|e| e.as_uuid()))

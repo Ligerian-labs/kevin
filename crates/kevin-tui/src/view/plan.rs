@@ -59,10 +59,14 @@ pub(super) fn view(model: &Model, frame: &mut Frame<'_>, area: Rect) {
                 };
                 let tier = task.suggested_tier.as_deref().unwrap_or(fmt::UNKNOWN);
                 let parallel = if task.parallel_safe { "∥" } else { "→" };
+                // `allow_push` widens the blast radius past the workspace, so
+                // it is called out rather than hidden (`plan/09` §Workspace
+                // isolation: "flagged in the plan approval view").
+                let push = if task.allow_push { " · PUSH" } else { "" };
                 Line::from(Span::styled(
                     fmt::truncate(
                         &format!(
-                            "{}{indent}{} {} · {tier} {parallel} · {} criteria{deps}",
+                            "{}{indent}{} {} · {tier} {parallel} · {} criteria{push}{deps}",
                             cursor(selected),
                             task.kind,
                             task.title,

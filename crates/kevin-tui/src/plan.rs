@@ -23,6 +23,12 @@ pub struct PlanTask {
     pub suggested_tier: Option<String>,
     /// Whether the task may run beside its siblings (defaults to `true`).
     pub parallel_safe: bool,
+    /// Whether the task is allowed to push to a remote. `plan/09-security.md`
+    /// §Workspace isolation requires this to be **visible in the approval
+    /// view**: it is the one plan field that widens the blast radius beyond
+    /// the workspace, so an operator must not have to read the raw JSON to
+    /// see it. Defaults to `false`.
+    pub allow_push: bool,
     /// Ids this task waits for.
     pub depends_on: Vec<String>,
     /// How many acceptance criteria it carries.
@@ -131,6 +137,10 @@ fn read_task(value: &Value) -> Option<PlanTask> {
             .get("parallel_safe")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        allow_push: object
+            .get("allow_push")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         depends_on: object
             .get("depends_on")
             .and_then(Value::as_array)

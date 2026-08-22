@@ -299,10 +299,17 @@ fn insecure_bind(config: &KevinConfig, sources: &Sources, errors: &mut ConfigErr
     let has_api_token = !config.server.auth_token_file.as_os_str().is_empty();
     let has_kohral_token = (config.kevin.profile == Profile::Kohral || config.kohral.enabled)
         && !config.kohral.token_file.as_os_str().is_empty();
+    // Whether the file *exists with mode 0600* cannot be decided here:
+    // `load()` is a pure function of the layers (a config may legitimately be
+    // validated on a machine that will never serve it), and the file may be
+    // created between `load` and `serve`. `crate::token::check_bind_security`
+    // makes that check at startup, which is what `plan/09-security.md`
+    // §API authentication asks for.
     if !has_api_token && !has_kohral_token {
         errors.push(ConfigError::InsecureBind {
             bind: config.server.bind.to_string(),
             layer: source_of(sources, "server.bind"),
+            reason: "no token file is configured".to_owned(),
         });
     }
 }

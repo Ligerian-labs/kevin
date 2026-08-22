@@ -346,6 +346,16 @@ impl Harness {
     /// Spawns `kevin`, waits until the `marker` event is recorded, sends
     /// SIGINT and returns the exit code.
     pub async fn interrupt_after(&self, args: &[&str], marker: &str) -> Option<i32> {
+        self.signal_after(args, marker, "INT").await
+    }
+
+    /// Spawns `kevin`, waits until the `marker` event is recorded in
+    /// `core.events`, sends `SIG<signal>` and returns the exit code
+    /// (`None` when the process was killed by the signal).
+    ///
+    /// `KILL` is the WS-25 chaos case: the process gets no chance to record
+    /// anything, which is what makes the restart path observable.
+    pub async fn signal_after(&self, args: &[&str], marker: &str, signal: &str) -> Option<i32> {
         let bin = assert_cmd::cargo::cargo_bin("kevin");
         let mut command = tokio::process::Command::new(bin);
         let home = self.tmp.path().join("home");
@@ -387,14 +397,40 @@ impl Harness {
             self.has_event(marker).await,
             "{marker} never happened; cannot interrupt the run"
         );
-        signal_interrupt(child.id().expect("child pid"));
+        send_signal(child.id().expect("child pid"), signal);
 
         let status = tokio::time::timeout(Duration::from_secs(60), child.wait())
             .await
-            .expect("kevin exits after SIGINT")
+            .unwrap_or_else(|_| panic!("kevin did not exit after SIG{signal}"))
             .expect("wait");
         let _ = drain.await;
         status.code()
+    }
+
+    /// Polls `core.events` until `event_type` appears, or fails after `within`.
+    pub async fn await_event(&self, event_type: &str, within: Duration) {
+        let deadline = tokio::time::Instant::now() + within;
+        while tokio::time::Instant::now() < deadline {
+            if self.has_event(event_type).await {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("`{event_type}` was never recorded within {within:?}");
+    }
+
+    /// Payloads of every `event_type` event, in global order.
+    pub async fn event_payloads(&self, event_type: &str) -> Vec<serde_json::Value> {
+        let Some(db) = &self.db else {
+            return Vec::new();
+        };
+        sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT payload FROM core.events WHERE event_type = $1 ORDER BY position",
+        )
+        .bind(event_type)
+        .fetch_all(db.pool())
+        .await
+        .expect("read core.events")
     }
 
     async fn has_event(&self, event_type: &str) -> bool {
@@ -446,19 +482,19 @@ pub async fn task_kinds(harness: &Harness) -> Vec<String> {
 }
 
 #[cfg(unix)]
-fn signal_interrupt(pid: u32) {
+fn send_signal(pid: u32, signal: &str) {
     let status = std::process::Command::new("kill")
-        .args(["-INT", &pid.to_string()])
+        .args([&format!("-{signal}"), &pid.to_string()])
         .status();
     assert!(
         status.is_ok_and(|s| s.success()),
-        "could not SIGINT pid {pid}"
+        "could not send SIG{signal} to pid {pid}"
     );
 }
 
 #[cfg(not(unix))]
-fn signal_interrupt(_pid: u32) {
-    unimplemented!("the Ctrl-C scenario needs a unix signal");
+fn send_signal(_pid: u32, _signal: &str) {
+    unimplemented!("the signal scenarios need unix signals");
 }
 
 /// Deep-merges `extra` into `base`; `extra` wins on a leaf. Appending raw TOML

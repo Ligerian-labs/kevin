@@ -117,3 +117,84 @@ mod tests {
         assert_eq!(read_token_file(&path).unwrap(), "def");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Startup check for a non-loopback bind
+// ---------------------------------------------------------------------------
+
+/// Refuses to serve a non-loopback bind unless a token file **exists with mode
+/// `0600`** (`plan/09-security.md` §API authentication and exposure).
+///
+/// This is a *startup* check, not a load-time one: `load()` stays a pure
+/// function of the configuration layers, and the file may legitimately be
+/// created between `kevin config show` and `kevin serve`. A configured but
+/// missing or world-readable token file is worse than no configuration at all
+/// — the operator believes the port is protected — so it is an error, not a
+/// warning.
+///
+/// Loopback binds return `Ok` without touching the filesystem.
+///
+/// # Errors
+/// [`ConfigError::InsecureBind`] with the reason the bind cannot be protected.
+pub fn check_bind_security(config: &crate::KevinConfig) -> Result<(), crate::ConfigError> {
+    if config.server.bind.ip().is_loopback() {
+        return Ok(());
+    }
+    let api = token_state(&config.server.auth_token_file);
+    let kohral = if config.kevin.profile == crate::Profile::Kohral || config.kohral.enabled {
+        token_state(&config.kohral.token_file)
+    } else {
+        TokenState::Unset
+    };
+    // Either surface may carry the credential, so one usable token file is
+    // enough; the reason reported is the more specific of the two.
+    if matches!(api, TokenState::Ok) || matches!(kohral, TokenState::Ok) {
+        return Ok(());
+    }
+    let reason = match (&api, &kohral) {
+        (TokenState::Problem(reason), _) | (_, TokenState::Problem(reason)) => reason.clone(),
+        _ => "no token file is configured".to_owned(),
+    };
+    Err(crate::ConfigError::InsecureBind {
+        bind: config.server.bind.to_string(),
+        layer: crate::Source::Default,
+        reason,
+    })
+}
+
+/// Whether a token file can actually protect a non-loopback bind.
+enum TokenState {
+    /// No path configured.
+    Unset,
+    /// A path is configured but unusable; the string says why.
+    Problem(String),
+    /// Exists, non-empty, and (on unix) mode `0600`.
+    Ok,
+}
+
+fn token_state(path: &Path) -> TokenState {
+    if path.as_os_str().is_empty() {
+        return TokenState::Unset;
+    }
+    let display = path.display();
+    let Ok(meta) = std::fs::metadata(path) else {
+        return TokenState::Problem(format!("token file {display} does not exist"));
+    };
+    if !meta.is_file() {
+        return TokenState::Problem(format!("token file {display} is not a regular file"));
+    }
+    if meta.len() == 0 {
+        return TokenState::Problem(format!("token file {display} is empty"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = meta.permissions().mode() & 0o777;
+        if mode != 0o600 {
+            return TokenState::Problem(format!(
+                "token file {display} has mode {mode:04o}, expected 0600"
+            ));
+        }
+    }
+    TokenState::Ok
+}

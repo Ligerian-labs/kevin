@@ -369,8 +369,11 @@ impl TaskRunner {
                 self.phase = Phase::Streaming;
                 Ok(handle)
             }
+            // A missing binary or a rejected flag is not worth a retry: the
+            // adapter classifies its own errors (`plan/09` §Sandbox tiers,
+            // `plan/05` §Retries).
             Err(err) => Err(AttemptResult::Failed {
-                class: FailureClass::Transient,
+                class: err.failure_class(),
                 message: format!("worker spawn failed: {err}"),
             }),
         }

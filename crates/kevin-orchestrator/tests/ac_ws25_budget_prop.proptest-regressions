@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 35078ff021c33b658bba7af4b46449e5119a2e0b2007ee610373c440f9d5581b # shrinks to budget = Budget { max_usd: Some(0.01), max_tokens: None, max_wall: Some(3600s), max_attempts: 1, max_parallel: 1 }, tasks = [GenTask { depends_on: [], cost_cents: 2, input_tokens: 0, output_tokens: 0 }]
+cc 00e45fb3288dc508d4cce4071bfe6dfb3e81ef22e67daf9b7958a761937d3c14 # shrinks to budget = Budget { max_usd: Some(0.01), max_tokens: None, max_wall: Some(3600s), max_attempts: 1, max_parallel: 1 }, tasks = [GenTask { depends_on: [], cost_cents: 2, input_tokens: 0, output_tokens: 0 }, GenTask { depends_on: [], cost_cents: 2, input_tokens: 0, output_tokens: 0 }]
